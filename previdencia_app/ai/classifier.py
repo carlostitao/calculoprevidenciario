@@ -7,7 +7,7 @@ from pathlib import Path
 
 from ..config import MODEL_EXTRACAO
 from ..models.documento import TipoDocumento
-from .client import get_client
+from .client import get_client, limpar_json
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +41,8 @@ def classificar_documento(texto: str) -> TipoDocumento:
         return TipoDocumento.DESCONHECIDO
 
     try:
-        dados = json.loads(result.data["texto"])
+        texto_limpo = limpar_json(result.data["texto"])
+        dados = json.loads(texto_limpo)
         tipo_str = dados.get("tipo", "DESCONHECIDO").upper()
         return TipoDocumento(tipo_str)
     except (json.JSONDecodeError, ValueError, KeyError) as exc:
