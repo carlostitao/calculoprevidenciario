@@ -277,6 +277,7 @@ def extrair(texto: str, tipo: TipoDocumento, caso_id: int, documento_id: Optiona
     _SONNET_TIPOS = {TipoDocumento.CNIS, TipoDocumento.CTPS, TipoDocumento.CTC, TipoDocumento.FGTS}
     modelo = MODEL_ANALISE if tipo in _SONNET_TIPOS else MODEL_EXTRACAO
     limite_texto = 30000 if tipo in _SONNET_TIPOS else 8000
+    max_tokens = 8192 if tipo in _SONNET_TIPOS else 4096
 
     result = get_client().chamar(
         system=system,
@@ -284,6 +285,7 @@ def extrair(texto: str, tipo: TipoDocumento, caso_id: int, documento_id: Optiona
         modelo=modelo,
         operacao=f"extracao_{tipo.value.lower()}",
         caso_id=caso_id,
+        max_tokens=max_tokens,
     )
 
     if not result.success or not result.data:

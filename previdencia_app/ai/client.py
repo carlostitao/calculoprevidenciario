@@ -111,6 +111,7 @@ class AIClient:
         operacao: str = "generica",
         caso_id: Optional[int] = None,
         cache_system: bool = True,
+        max_tokens: int = 4096,
     ) -> AIResult:
         """
         Realiza chamada à API com retry exponencial.
@@ -128,7 +129,7 @@ class AIClient:
 
                 response = self._client.messages.create(
                     model=modelo,
-                    max_tokens=4096,
+                    max_tokens=max_tokens,
                     system=system_content,
                     messages=[{"role": "user", "content": user}],
                     timeout=_TIMEOUT,
@@ -174,6 +175,7 @@ class AIClient:
         modelo: str,
         operacao: str = "ocr",
         caso_id: Optional[int] = None,
+        max_tokens: int = 4096,
     ) -> AIResult:
         """
         Envia imagem diretamente para a API de visão do Claude.
@@ -185,7 +187,7 @@ class AIClient:
             try:
                 response = self._client.messages.create(
                     model=modelo,
-                    max_tokens=4096,
+                    max_tokens=max_tokens,
                     system=system,
                     messages=[
                         {
