@@ -10,7 +10,7 @@ from typing import List, Optional
 
 from ..config import MODEL_ANALISE
 from ..models import Competencia, FonteDocumento
-from .client import get_client
+from .client import get_client, limpar_json
 
 logger = logging.getLogger(__name__)
 
@@ -102,9 +102,7 @@ def analisar_inconsistencias(competencias: List[Competencia]) -> List[Inconsiste
         return []
 
     try:
-        texto_resp = result.data["texto"].strip()
-        if texto_resp.startswith("```"):
-            texto_resp = texto_resp.split("\n", 1)[1].rsplit("```", 1)[0]
+        texto_resp = limpar_json(result.data["texto"])
         dados_resp = json.loads(texto_resp)
     except (json.JSONDecodeError, KeyError) as exc:
         logger.error("JSON inválido na análise: %s", exc)

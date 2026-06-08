@@ -210,37 +210,138 @@ class DocumentsPanel(ctk.CTkFrame):
 
 
 def _extrair_texto(caminho: str) -> str:
-    """Extrai texto do PDF/imagem, com fallback para OCR."""
+    """
+    Extrai texto do documento usando três estratégias em cascata:
+
+    1. pdfplumber — rápido e gratuito para PDFs digitais (texto selecionável)
+    2. Claude Vision — OCR via API para PDFs escaneados e imagens,
+       sem necessidade do Tesseract instalado localmente
+    3. Fallback Tesseract local — se disponível e as anteriores falharem
+    """
     p = Path(caminho)
     sufixo = p.suffix.lower()
 
+    # ── Estratégia 1: pdfplumber para PDFs com texto nativo ─────────────────
     if sufixo == ".pdf":
         try:
             import pdfplumber
             with pdfplumber.open(caminho) as pdf:
                 partes = [page.extract_text() or "" for page in pdf.pages]
             texto = "\n".join(partes).strip()
-            if texto:
+            # Considera válido se tiver ao menos 100 chars de conteúdo real
+            if len(texto) >= 100:
+                logger.info("pdfplumber extraiu %d chars de %s", len(texto), p.name)
                 return texto
+            logger.info("pdfplumber retornou texto curto (%d chars) — tentando OCR", len(texto))
         except Exception as exc:
-            logger.warning("pdfplumber falhou em %s: %s — tentando OCR", caminho, exc)
+            logger.warning("pdfplumber falhou em %s: %s", p.name, exc)
 
-    # Fallback OCR
+    # ── Estratégia 2: Claude Vision (sem Tesseract) ──────────────────────────
+    texto_vision = _ocr_via_claude(caminho, sufixo)
+    if texto_vision:
+        return texto_vision
+
+    # ── Estratégia 3: Tesseract local (fallback, opcional) ───────────────────
+    return _ocr_tesseract(caminho, sufixo)
+
+
+def _ocr_via_claude(caminho: str, sufixo: str) -> str:
+    """
+    Usa a API de visão do Claude para extrair texto de imagens e PDFs escaneados.
+    Não requer nenhuma instalação local (Tesseract, Poppler, etc.).
+    """
+    from ..ai.client import get_client, _MIME_MAP
+    from ..config import MODEL_EXTRACAO
+
+    _SYSTEM_OCR = (
+        "Você é um sistema de OCR especializado em documentos previdenciários brasileiros. "
+        "Transcreva TODO o texto visível na imagem, preservando a estrutura (tabelas, colunas, "
+        "cabeçalhos). Mantenha números, datas e valores exatamente como aparecem. "
+        "Retorne apenas o texto transcrito, sem comentários adicionais."
+    )
+    _INSTRUCAO = "Transcreva todo o texto desta página do documento."
+
+    partes: list[str] = []
+
+    try:
+        if sufixo == ".pdf":
+            # Converte cada página do PDF em imagem PNG e envia para a API
+            try:
+                import pdfplumber
+                from PIL import Image
+                import io
+
+                with pdfplumber.open(caminho) as pdf:
+                    for i, page in enumerate(pdf.pages):
+                        try:
+                            img_pil: Image.Image = page.to_image(resolution=150).original
+                            buf = io.BytesIO()
+                            img_pil.save(buf, format="PNG")
+                            img_bytes = buf.getvalue()
+
+                            result = get_client().chamar_com_imagem(
+                                system=_SYSTEM_OCR,
+                                instrucao=_INSTRUCAO,
+                                imagem_bytes=img_bytes,
+                                mime_type="image/png",
+                                modelo=MODEL_EXTRACAO,
+                                operacao="ocr_pdf_pagina",
+                            )
+                            if result.success and result.data:
+                                partes.append(result.data["texto"])
+                            else:
+                                logger.warning("OCR Vision falhou na pág %d: %s", i + 1, result.error)
+                        except Exception as exc:
+                            logger.warning("Erro ao processar pág %d via Vision: %s", i + 1, exc)
+
+            except ImportError:
+                logger.warning("pdfplumber/Pillow não disponível para renderizar páginas PDF")
+
+        elif sufixo in _MIME_MAP:
+            # Imagem direta (PNG, JPG, etc.)
+            mime = _MIME_MAP[sufixo]
+            img_bytes = Path(caminho).read_bytes()
+            result = get_client().chamar_com_imagem(
+                system=_SYSTEM_OCR,
+                instrucao=_INSTRUCAO,
+                imagem_bytes=img_bytes,
+                mime_type=mime,
+                modelo=MODEL_EXTRACAO,
+                operacao="ocr_imagem",
+            )
+            if result.success and result.data:
+                partes.append(result.data["texto"])
+
+    except Exception as exc:
+        logger.error("OCR via Claude Vision falhou em %s: %s", caminho, exc)
+
+    texto = "\n".join(partes).strip()
+    if texto:
+        logger.info("Claude Vision extraiu %d chars de %s", len(texto), Path(caminho).name)
+    return texto
+
+
+def _ocr_tesseract(caminho: str, sufixo: str) -> str:
+    """Fallback com Tesseract local — usado apenas se disponível na máquina."""
     try:
         import pytesseract
         from PIL import Image
 
         if sufixo == ".pdf":
             import pdfplumber
+            import io
             with pdfplumber.open(caminho) as pdf:
                 partes = []
                 for page in pdf.pages:
-                    img = page.to_image(resolution=200).original
+                    img: Image.Image = page.to_image(resolution=200).original
                     partes.append(pytesseract.image_to_string(img, lang="por"))
             return "\n".join(partes)
         else:
             img = Image.open(caminho)
             return pytesseract.image_to_string(img, lang="por")
+    except ImportError:
+        logger.debug("Tesseract não disponível — ignorado")
+        return ""
     except Exception as exc:
-        logger.error("OCR falhou em %s: %s", caminho, exc)
+        logger.error("Tesseract falhou em %s: %s", caminho, exc)
         return ""

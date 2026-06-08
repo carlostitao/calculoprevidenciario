@@ -11,7 +11,7 @@ from typing import List, Optional
 from ..config import MODEL_EXTRACAO
 from ..models import Competencia, FonteDocumento, TipoVinculo
 from ..models.documento import TipoDocumento
-from .client import get_client
+from .client import get_client, limpar_json
 
 logger = logging.getLogger(__name__)
 
@@ -175,10 +175,7 @@ def extrair(texto: str, tipo: TipoDocumento, caso_id: int, documento_id: Optiona
         return []
 
     try:
-        # Remove markdown fence se presente
-        texto_resp = result.data["texto"].strip()
-        if texto_resp.startswith("```"):
-            texto_resp = texto_resp.split("\n", 1)[1].rsplit("```", 1)[0]
+        texto_resp = limpar_json(result.data["texto"])
         dados = json.loads(texto_resp)
     except (json.JSONDecodeError, KeyError) as exc:
         logger.error("JSON inválido na extração %s: %s | resp: %s", tipo, exc, result.data.get("texto", "")[:200])
