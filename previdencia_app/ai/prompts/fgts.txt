@@ -47,7 +47,7 @@ No cabeçalho de cada página/conta há:
 Cada conta = um vínculo empregatício separado.
 
 ═══════════════════════════════════════════════════════════════
-SCHEMA JSON DE SAÍDA
+SCHEMA JSON DE SAÍDA — COMPACTO (minimize tokens, omita campos nulos)
 ═══════════════════════════════════════════════════════════════
 {
   "titular": "string",
@@ -55,16 +55,8 @@ SCHEMA JSON DE SAÍDA
   "vinculos": [
     {
       "empregador": "string",
-      "cnpj": "string (apenas dígitos) ou null",
-      "numero_conta": "string ou null",
-      "data_admissao": "MM/YYYY ou null",
-      "competencias": [
-        {
-          "competencia": "MM/YYYY",
-          "valor_deposito": 0.00,
-          "salario": 0.00
-        }
-      ]
+      "cnpj": "string ou null",
+      "competencias": [{"competencia":"MM/YYYY","valor_deposito":0.00,"salario":0.00}]
     }
   ]
 }

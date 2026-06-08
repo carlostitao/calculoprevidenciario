@@ -32,37 +32,17 @@ Para cada célula não vazia e não zero, gere uma competência:
 Células "-" ou "0,00" indicam que o servidor não estava ativo naquele mês — não gere competência.
 
 ═══════════════════════════════════════════════════════════════
-SCHEMA JSON DE SAÍDA
+SCHEMA JSON DE SAÍDA — COMPACTO (minimize tokens, omita campos nulos)
 ═══════════════════════════════════════════════════════════════
 {
-  "segurado": {
-    "nome": "string",
-    "cpf": "string (apenas dígitos)",
-    "matricula": "string ou null"
-  },
+  "segurado": {"nome":"string","cpf":"string","matricula":"string ou null"},
   "orgao_emissor": "string",
   "regime": "RPPS_ESTADUAL|RPPS_MUNICIPAL|RPPS_FEDERAL|RGPS",
   "indicadores_vinculo": ["PRPPS"],
   "cargo": "string ou null",
-  "empregador": "string (nome do órgão/secretaria)",
-  "cnpj": "string (apenas dígitos) ou null",
-  "periodos_certificados": [
-    {
-      "data_inicio": "MM/YYYY",
-      "data_fim": "MM/YYYY",
-      "tempo_dias": 0
-    }
-  ],
-  "tempo_total_certificado": {
-    "anos": 0,
-    "meses": 0,
-    "dias": 0
-  },
-  "competencias": [
-    {
-      "competencia": "MM/YYYY",
-      "remuneracao": 0.00,
-      "base_contribuicao": 0.00
-    }
-  ]
+  "empregador": "string",
+  "cnpj": "string ou null",
+  "periodos_certificados": [{"data_inicio":"MM/YYYY","data_fim":"MM/YYYY","tempo_dias":0}],
+  "tempo_total_certificado": {"anos":0,"meses":0,"dias":0},
+  "competencias": [{"competencia":"MM/YYYY","remuneracao":0.00,"base_contribuicao":0.00}]
 }

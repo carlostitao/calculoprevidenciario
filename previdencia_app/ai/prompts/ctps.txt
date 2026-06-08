@@ -39,28 +39,18 @@ GERAÇÃO DE COMPETÊNCIAS
 - Meses anteriores a 07/1994 (Plano Real): inclua normalmente — o sistema zerará os valores
 
 ═══════════════════════════════════════════════════════════════
-SCHEMA JSON DE SAÍDA
+SCHEMA JSON DE SAÍDA — COMPACTO (minimize tokens, omita campos nulos)
 ═══════════════════════════════════════════════════════════════
 {
-  "segurado": {
-    "nome": "string",
-    "cpf": "string (apenas dígitos) ou null",
-    "pis_pasep": "string ou null",
-    "data_nascimento": "DD/MM/YYYY ou null"
-  },
+  "segurado": {"nome":"string","cpf":"string ou null","pis_pasep":"string ou null","data_nascimento":"DD/MM/YYYY ou null"},
   "vinculos": [
     {
-      "empregador": "string (razão social)",
-      "cnpj": "string (apenas dígitos) ou null",
+      "empregador": "string",
+      "cnpj": "string ou null",
       "cargo": "string ou null",
       "data_admissao": "MM/YYYY",
       "data_demissao": "MM/YYYY ou null",
-      "competencias": [
-        {
-          "competencia": "MM/YYYY",
-          "salario": 0.00
-        }
-      ]
+      "competencias": [{"competencia":"MM/YYYY","salario":0.00}]
     }
   ]
 }

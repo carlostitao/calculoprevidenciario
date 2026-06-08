@@ -64,45 +64,37 @@ PSC-MEN-SM-EC103 = pendência salário abaixo do mínimo (pendencia: true)
 Qualquer indicador não listado: marque pendencia: true por precaução.
 
 ═══════════════════════════════════════════════════════════════
-SCHEMA JSON DE SAÍDA
+SCHEMA JSON DE SAÍDA — COMPACTO (minimize tokens)
 ═══════════════════════════════════════════════════════════════
+REGRA DE COMPACIDADE: omita campos nulos ou padrão.
+- "pendencia": false → omita o campo (só inclua quando true)
+- "valor_contribuicao": null → omita o campo
+- "cnpj": null → omita o campo
+- "data_fim": null → omita o campo
+
 {
-  "segurado": {
-    "nome": "string",
-    "cpf": "string (apenas dígitos)",
-    "data_nascimento": "DD/MM/YYYY",
-    "data_filiacao": "DD/MM/YYYY ou null",
-    "nit": "string ou null"
-  },
+  "segurado": {"nome":"string","cpf":"string","data_nascimento":"DD/MM/YYYY","nit":"string ou null"},
   "vinculos": [
     {
       "seq": 1,
-      "empregador": "string (nome do empregador ou 'RECOLHIMENTO' ou 'AGRUPAMENTO DE CONTRATANTES')",
-      "cnpj": "string (apenas dígitos) ou null",
+      "empregador": "string",
+      "cnpj": "string (apenas dígitos, omita se null)",
       "data_inicio": "MM/YYYY",
-      "data_fim": "MM/YYYY ou null",
+      "data_fim": "MM/YYYY (omita se null)",
       "tipo": "CLT|AUTONOMO|MEI|FACULTATIVO|RPPS|RURAL",
-      "indicadores_vinculo": ["ACNISVR", "PRPPS"],
+      "indicadores_vinculo": ["ACNISVR"],
       "competencias": [
         {
           "competencia": "MM/YYYY",
           "remuneracao": 0.00,
-          "base_contribuicao": 0.00,
-          "valor_contribuicao": null,
-          "indicadores": ["IREM-INDPEND"],
-          "pendencia": false
+          "valor_contribuicao": 0.00,
+          "pendencia": true
         }
       ]
     }
   ],
   "beneficios": [
-    {
-      "nb": "string (número do benefício)",
-      "especie": "string (ex: 31-AUXILIO DOENCA, 41-APOSENTADORIA IDADE)",
-      "data_inicio": "DD/MM/YYYY ou null",
-      "data_fim": "DD/MM/YYYY ou null",
-      "situacao": "string ou null"
-    }
+    {"nb":"string","especie":"string","data_inicio":"DD/MM/YYYY","data_fim":"DD/MM/YYYY"}
   ]
 }
 
