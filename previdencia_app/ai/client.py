@@ -93,38 +93,60 @@ def parse_json_robusto(texto: str) -> dict:
     import json
 
     candidato = limpar_json(texto)
+    _log_json = logging.getLogger(__name__)
+    _log_json.debug("[JSON] Candidato limpo: %d chars", len(candidato))
 
     # Tentativa 1: JSON padrão
     try:
-        return json.loads(candidato)
-    except json.JSONDecodeError:
-        pass
+        resultado = json.loads(candidato)
+        _log_json.debug("[JSON] Parsed OK na tentativa 1 (padrão)")
+        return resultado
+    except json.JSONDecodeError as e1:
+        _log_json.debug("[JSON] Tentativa 1 falhou: %s", e1)
 
     # Tentativa 2: após correções heurísticas
     corrigido = _corrigir_json(candidato)
     try:
-        return json.loads(corrigido)
-    except json.JSONDecodeError:
-        pass
+        resultado = json.loads(corrigido)
+        _log_json.debug("[JSON] Parsed OK na tentativa 2 (heurísticas)")
+        return resultado
+    except json.JSONDecodeError as e2:
+        _log_json.debug("[JSON] Tentativa 2 falhou: %s", e2)
 
     # Tentativa 3: truncamento — encontra o último objeto/array fechado de forma válida
-    # Reduz progressivamente pelo último ',' até encontrar JSON válido
     for separador in ['\n  },\n', '\n    },\n', '},\n', '}']:
         idx = corrigido.rfind(separador)
         if idx == -1:
             continue
-        # Fecha o array e objeto raiz
-        tentativa = corrigido[: idx + separador.rstrip(',\n').__len__()]
-        # Conta chaves/colchetes não fechados e fecha
+        tentativa = corrigido[: idx + len(separador.rstrip(',\n'))]
         tentativa = _fechar_json_truncado(tentativa)
         try:
-            return json.loads(tentativa)
+            resultado = json.loads(tentativa)
+            _log_json.warning(
+                "[JSON] Parsed na tentativa 3 (truncamento em %d/%d chars) — "
+                "resposta foi cortada, algumas competências podem estar faltando",
+                idx, len(corrigido),
+            )
+            return resultado
         except json.JSONDecodeError:
             continue
 
     # Última tentativa: fecha automaticamente qualquer truncamento
     fechado = _fechar_json_truncado(corrigido)
-    return json.loads(fechado)
+    try:
+        resultado = json.loads(fechado)
+        _log_json.warning(
+            "[JSON] Parsed na tentativa 4 (fechar automaticamente %d chars) — "
+            "resposta provavelmente truncada",
+            len(fechado),
+        )
+        return resultado
+    except json.JSONDecodeError as e_final:
+        _log_json.error(
+            "[JSON] Todas as tentativas falharam. Erro final: %s | Primeiros 500 chars: %s",
+            e_final, candidato[:500],
+        )
+        raise
 
 
 def _fechar_json_truncado(texto: str) -> str:
@@ -221,11 +243,25 @@ class AIClient:
 
                 tokens_in = response.usage.input_tokens
                 tokens_out = response.usage.output_tokens
+                stop_reason = response.stop_reason
                 custo = self._calcular_custo(modelo, tokens_in, tokens_out)
                 self._custo_total += custo
                 self._log_uso(modelo, operacao, tokens_in, tokens_out, custo, caso_id)
 
                 texto = response.content[0].text if response.content else ""
+
+                if stop_reason == "max_tokens":
+                    logger.warning(
+                        "[AI] %s op=%s — TRUNCADO por max_tokens=%d | "
+                        "tokens_in=%d tokens_out=%d | resposta=%d chars",
+                        modelo, operacao, max_tokens, tokens_in, tokens_out, len(texto),
+                    )
+                else:
+                    logger.info(
+                        "[AI] %s op=%s — stop=%s | tokens_in=%d tokens_out=%d (%.4f USD) | resposta=%d chars",
+                        modelo, operacao, stop_reason, tokens_in, tokens_out, custo, len(texto),
+                    )
+
                 return AIResult(
                     success=True,
                     data={"texto": texto},
@@ -294,11 +330,25 @@ class AIClient:
 
                 tokens_in = response.usage.input_tokens
                 tokens_out = response.usage.output_tokens
+                stop_reason = response.stop_reason
                 custo = self._calcular_custo(modelo, tokens_in, tokens_out)
                 self._custo_total += custo
                 self._log_uso(modelo, operacao, tokens_in, tokens_out, custo, caso_id)
 
                 texto = response.content[0].text if response.content else ""
+
+                if stop_reason == "max_tokens":
+                    logger.warning(
+                        "[AI/visão] %s op=%s — TRUNCADO por max_tokens=%d | "
+                        "tokens_in=%d tokens_out=%d | resposta=%d chars",
+                        modelo, operacao, max_tokens, tokens_in, tokens_out, len(texto),
+                    )
+                else:
+                    logger.info(
+                        "[AI/visão] %s op=%s — stop=%s | tokens_in=%d tokens_out=%d (%.4f USD) | resposta=%d chars",
+                        modelo, operacao, stop_reason, tokens_in, tokens_out, custo, len(texto),
+                    )
+
                 return AIResult(
                     success=True,
                     data={"texto": texto},

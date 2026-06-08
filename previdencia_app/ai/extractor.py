@@ -264,13 +264,13 @@ def extrair(texto: str, tipo: TipoDocumento, caso_id: int, documento_id: Optiona
     Retorna lista vazia em caso de falha (nunca lança exceção).
     """
     if tipo == TipoDocumento.DESCONHECIDO:
-        logger.warning("Tipo de documento desconhecido — extração ignorada")
+        logger.warning("[EXTRATOR] Tipo desconhecido — extração ignorada")
         return []
 
     try:
         system = _prompt_para_tipo(tipo)
     except ValueError as exc:
-        logger.error("Sem prompt para %s: %s", tipo, exc)
+        logger.error("[EXTRATOR] Sem prompt para %s: %s", tipo, exc)
         return []
 
     from ..config import MODEL_ANALISE
@@ -279,9 +279,16 @@ def extrair(texto: str, tipo: TipoDocumento, caso_id: int, documento_id: Optiona
     limite_texto = 30000 if tipo in _SONNET_TIPOS else 8000
     max_tokens = 16000 if tipo in _SONNET_TIPOS else 4096
 
+    texto_truncado = texto[:limite_texto]
+    logger.info(
+        "[EXTRATOR] Iniciando extração: tipo=%s modelo=%s max_tokens=%d "
+        "texto_original=%d chars texto_enviado=%d chars",
+        tipo.value, modelo, max_tokens, len(texto), len(texto_truncado),
+    )
+
     result = get_client().chamar(
         system=system,
-        user=f"Extraia os dados do seguinte documento:\n\n{texto[:limite_texto]}",
+        user=f"Extraia os dados do seguinte documento:\n\n{texto_truncado}",
         modelo=modelo,
         operacao=f"extracao_{tipo.value.lower()}",
         caso_id=caso_id,
@@ -289,35 +296,72 @@ def extrair(texto: str, tipo: TipoDocumento, caso_id: int, documento_id: Optiona
     )
 
     if not result.success or not result.data:
-        logger.error("Extração falhou para %s: %s", tipo, result.error)
+        logger.error("[EXTRATOR] Chamada API falhou para %s: %s", tipo, result.error)
         return []
 
+    resposta_bruta = result.data.get("texto", "")
+    logger.debug("[EXTRATOR] Resposta bruta (%d chars):\n%s", len(resposta_bruta), resposta_bruta[:2000])
+
     try:
-        dados = parse_json_robusto(result.data["texto"])
+        dados = parse_json_robusto(resposta_bruta)
     except (json.JSONDecodeError, KeyError) as exc:
-        logger.error("JSON inválido na extração %s: %s | resp: %s", tipo, exc, result.data.get("texto", "")[:200])
+        logger.error(
+            "[EXTRATOR] JSON irrecuperável para %s: %s\n"
+            "--- Primeiros 1000 chars da resposta ---\n%s\n"
+            "--- Últimos 500 chars ---\n%s",
+            tipo, exc,
+            resposta_bruta[:1000],
+            resposta_bruta[-500:],
+        )
         return []
+
+    # Log do que o modelo entendeu
+    vinculos = dados.get("vinculos", [])
+    n_comps_raw = sum(len(v.get("competencias", [])) for v in vinculos)
+    logger.info(
+        "[EXTRATOR] JSON parseado OK: %d vínculos, %d competências raw (segurado=%s)",
+        len(vinculos), n_comps_raw,
+        dados.get("segurado", {}).get("nome", "?"),
+    )
+    if not vinculos:
+        logger.warning(
+            "[EXTRATOR] Nenhum vínculo encontrado. Chaves raiz presentes: %s",
+            list(dados.keys()),
+        )
 
     fonte = _TIPO_PARA_FONTE.get(tipo.value, FonteDocumento.MANUAL)
 
     try:
         if tipo == TipoDocumento.CNIS:
-            return _parse_cnis(dados, caso_id, documento_id)
-        if tipo == TipoDocumento.CTPS:
-            return _parse_ctps(dados, caso_id, documento_id)
-        if tipo == TipoDocumento.CTC:
-            return _parse_ctc(dados, caso_id, documento_id)
-        if tipo == TipoDocumento.HOLERITE:
-            return _parse_generico(dados, caso_id, documento_id, fonte, TipoVinculo.CLT)
-        if tipo == TipoDocumento.PRO_LABORE:
-            return _parse_generico(dados, caso_id, documento_id, fonte, TipoVinculo.PRO_LABORE)
-        if tipo == TipoDocumento.PGDAS_MEI:
-            return _parse_generico(dados, caso_id, documento_id, fonte, TipoVinculo.MEI)
-        if tipo == TipoDocumento.DARF:
-            return _parse_generico(dados, caso_id, documento_id, fonte, TipoVinculo.AUTONOMO)
-        if tipo == TipoDocumento.FGTS:
-            return _parse_fgts(dados, caso_id, documento_id)
+            resultado = _parse_cnis(dados, caso_id, documento_id)
+        elif tipo == TipoDocumento.CTPS:
+            resultado = _parse_ctps(dados, caso_id, documento_id)
+        elif tipo == TipoDocumento.CTC:
+            resultado = _parse_ctc(dados, caso_id, documento_id)
+        elif tipo == TipoDocumento.HOLERITE:
+            resultado = _parse_generico(dados, caso_id, documento_id, fonte, TipoVinculo.CLT)
+        elif tipo == TipoDocumento.PRO_LABORE:
+            resultado = _parse_generico(dados, caso_id, documento_id, fonte, TipoVinculo.PRO_LABORE)
+        elif tipo == TipoDocumento.PGDAS_MEI:
+            resultado = _parse_generico(dados, caso_id, documento_id, fonte, TipoVinculo.MEI)
+        elif tipo == TipoDocumento.DARF:
+            resultado = _parse_generico(dados, caso_id, documento_id, fonte, TipoVinculo.AUTONOMO)
+        elif tipo == TipoDocumento.FGTS:
+            resultado = _parse_fgts(dados, caso_id, documento_id)
+        else:
+            logger.warning("[EXTRATOR] Tipo sem parser: %s", tipo)
+            return []
+
+        n_pendentes = sum(1 for c in resultado if c.flag_pendencia_cnis)
+        n_pre_real = sum(1 for c in resultado if c.flag_inconsistencia)
+        logger.info(
+            "[EXTRATOR] Parser concluído: %d competências geradas "
+            "(%d com pendência CNIS, %d pré-Plano Real)",
+            len(resultado), n_pendentes, n_pre_real,
+        )
+        return resultado
+
     except Exception as exc:
-        logger.error("Erro ao parsear resposta de %s: %s", tipo, exc)
+        logger.error("[EXTRATOR] Erro no parser de %s: %s", tipo, exc, exc_info=True)
 
     return []
