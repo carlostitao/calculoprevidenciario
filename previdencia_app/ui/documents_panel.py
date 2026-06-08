@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import sys
 import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import TYPE_CHECKING, List, Optional
 
@@ -149,8 +150,13 @@ class DocumentsPanel(ctk.CTkFrame):
 
         def _trabalho() -> None:
             try:
-                texto = _extrair_texto(doc.caminho)
-                DocumentoRepository.atualizar_texto(doc.id, texto)
+                # B) Cache: reutiliza texto já extraído anteriormente
+                if doc.texto_extraido and len(doc.texto_extraido) >= 100:
+                    logger.info("[CACHE] Reutilizando texto salvo para %s (%d chars)", doc.nome_arquivo, len(doc.texto_extraido))
+                    texto = doc.texto_extraido
+                else:
+                    texto = _extrair_texto(doc.caminho)
+                    DocumentoRepository.atualizar_texto(doc.id, texto)
 
                 from ..ai.classifier import classificar_documento
                 tipo = classificar_documento(texto)
@@ -271,34 +277,52 @@ def _ocr_via_claude(caminho: str, sufixo: str) -> str:
 
     try:
         if sufixo == ".pdf":
-            # Converte cada página do PDF em imagem PNG e envia para a API
+            # A) OCR paralelo — renderiza todas as páginas e envia concorrentemente
             try:
                 import pdfplumber
                 from PIL import Image
                 import io
 
                 with pdfplumber.open(caminho) as pdf:
+                    paginas_bytes: list[tuple[int, bytes]] = []
                     for i, page in enumerate(pdf.pages):
                         try:
                             img_pil: Image.Image = page.to_image(resolution=150).original
                             buf = io.BytesIO()
                             img_pil.save(buf, format="PNG")
-                            img_bytes = buf.getvalue()
-
-                            result = get_client().chamar_com_imagem(
-                                system=_SYSTEM_OCR,
-                                instrucao=_INSTRUCAO,
-                                imagem_bytes=img_bytes,
-                                mime_type="image/png",
-                                modelo=MODEL_EXTRACAO,
-                                operacao="ocr_pdf_pagina",
-                            )
-                            if result.success and result.data:
-                                partes.append(result.data["texto"])
-                            else:
-                                logger.warning("OCR Vision falhou na pág %d: %s", i + 1, result.error)
+                            paginas_bytes.append((i, buf.getvalue()))
                         except Exception as exc:
-                            logger.warning("Erro ao processar pág %d via Vision: %s", i + 1, exc)
+                            logger.warning("Erro ao renderizar pág %d: %s", i + 1, exc)
+
+                logger.info("[OCR] %d páginas renderizadas — enviando em paralelo (workers=4)", len(paginas_bytes))
+
+                resultados_ocr: dict[int, str] = {}
+
+                def _ocr_pagina(item: tuple[int, bytes]) -> tuple[int, str]:
+                    idx, img_bytes = item
+                    r = get_client().chamar_com_imagem(
+                        system=_SYSTEM_OCR,
+                        instrucao=_INSTRUCAO,
+                        imagem_bytes=img_bytes,
+                        mime_type="image/png",
+                        modelo=MODEL_EXTRACAO,
+                        operacao="ocr_pdf_pagina",
+                    )
+                    if r.success and r.data:
+                        return (idx, r.data["texto"])
+                    logger.warning("[OCR] Falha na pág %d: %s", idx + 1, r.error)
+                    return (idx, "")
+
+                with ThreadPoolExecutor(max_workers=4) as pool:
+                    futuros = {pool.submit(_ocr_pagina, item): item[0] for item in paginas_bytes}
+                    for futuro in as_completed(futuros):
+                        try:
+                            idx, texto_pag = futuro.result()
+                            resultados_ocr[idx] = texto_pag
+                        except Exception as exc:
+                            logger.warning("[OCR] Exceção em pág %d: %s", futuros[futuro] + 1, exc)
+
+                partes = [resultados_ocr.get(i, "") for i in range(len(paginas_bytes))]
 
             except ImportError:
                 logger.warning("pdfplumber/Pillow não disponível para renderizar páginas PDF")

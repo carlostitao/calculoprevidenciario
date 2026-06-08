@@ -103,33 +103,90 @@ def _calcular_confianca(comp: dict) -> float:
     return preenchidos / len(campos_esperados)
 
 
+def _get(d: dict, *chaves, default=None):
+    """Busca o primeiro campo presente no dict entre os nomes alternativos fornecidos."""
+    for k in chaves:
+        v = d.get(k)
+        if v is not None and v != "" and v != 0:
+            return v
+    return default
+
+
+def _get_vinculos(dados: dict) -> list:
+    """Retorna a lista de vínculos independente do nome usado pelo modelo."""
+    return (
+        dados.get("vinculos")
+        or dados.get("contratos")
+        or dados.get("periodos")
+        or dados.get("empregos")
+        or []
+    )
+
+
+def _get_competencias(vinculo: dict) -> list:
+    """Retorna a lista de competências de um vínculo."""
+    return (
+        vinculo.get("competencias")
+        or vinculo.get("meses")
+        or vinculo.get("periodos_mensais")
+        or vinculo.get("remuneracoes")
+        or []
+    )
+
+
+def _get_competencia_str(comp: dict) -> str:
+    """Extrai a string MM/YYYY da competência."""
+    return (
+        comp.get("competencia")
+        or comp.get("mes")
+        or comp.get("mes_ano")
+        or comp.get("periodo")
+        or ""
+    )
+
+
+def _get_remuneracao(comp: dict) -> float:
+    """Extrai o valor de remuneração/salário da competência com múltiplos nomes."""
+    return _get(
+        comp,
+        "remuneracao", "salario", "valor", "remuneracao_bruta",
+        "salario_contribuicao", "base_contribuicao", "vencimento",
+        "salario_bruto", "rendimento",
+        default=0,
+    )
+
+
+def _get_empregador(vinculo: dict) -> str:
+    return _get(
+        vinculo,
+        "empregador", "empresa", "nome_empresa", "razao_social",
+        "orgao", "tomador", "contratante",
+        default="Não identificado",
+    )
+
+
 def _parse_cnis(dados: dict, caso_id: int, documento_id: Optional[int]) -> List[Competencia]:
     competencias: List[Competencia] = []
-    for vinculo in dados.get("vinculos", []):
-        tipo_str = vinculo.get("tipo", "CLT").upper()
+    for vinculo in _get_vinculos(dados):
+        tipo_str = _get(vinculo, "tipo", "tipo_vinculo", "categoria", default="CLT")
+        if isinstance(tipo_str, str):
+            tipo_str = tipo_str.upper()
         tipo_vinculo = _TIPO_PARA_VINCULO.get(tipo_str, TipoVinculo.CLT)
-        empregador = vinculo.get("empregador", "Não identificado")
-        cnpj = vinculo.get("cnpj")
+        empregador = _get_empregador(vinculo)
+        cnpj = _get(vinculo, "cnpj", "cpf_cnpj", "cnpj_cpf")
 
-        for comp in vinculo.get("competencias", []):
-            # Formato C: remuneracao vem de salario_contribuicao
-            remuneracao = (
-                comp.get("remuneracao")
-                or comp.get("salario_contribuicao")
-                or comp.get("base_contribuicao")
-                or 0
-            )
-            base = comp.get("base_contribuicao") or remuneracao
-            valor_contrib = comp.get("valor_contribuicao") or comp.get("contribuicao")
-            pendencia = bool(comp.get("pendencia", False))
-            indicadores = comp.get("indicadores", [])
-            # Qualquer indicador que não seja puramente informativo → pendência
+        for comp in _get_competencias(vinculo):
+            remuneracao = _get_remuneracao(comp)
+            base = _get(comp, "base_contribuicao", "base", default=remuneracao)
+            valor_contrib = _get(comp, "valor_contribuicao", "contribuicao", "valor_inss", "inss")
+            pendencia = bool(_get(comp, "pendencia", "tem_pendencia", "flag_pendencia", default=False))
+            indicadores = comp.get("indicadores") or comp.get("flags") or []
             if indicadores and not pendencia:
                 pendencia = True
 
             c = Competencia(
                 caso_id=caso_id,
-                competencia=comp.get("competencia", ""),
+                competencia=_get_competencia_str(comp),
                 tipo_vinculo=tipo_vinculo,
                 empregador_nome=empregador,
                 empregador_cnpj_cpf=cnpj,
@@ -150,21 +207,20 @@ def _parse_cnis(dados: dict, caso_id: int, documento_id: Optional[int]) -> List[
 
 def _parse_ctps(dados: dict, caso_id: int, documento_id: Optional[int]) -> List[Competencia]:
     competencias: List[Competencia] = []
-    for vinculo in dados.get("vinculos", []):
-        empregador = vinculo.get("empregador", "Não identificado")
-        cnpj = vinculo.get("cnpj")
-        inicio = vinculo.get("data_admissao", "")
-        fim = vinculo.get("data_demissao")
+    for vinculo in _get_vinculos(dados):
+        empregador = _get_empregador(vinculo)
+        cnpj = _get(vinculo, "cnpj", "cpf_cnpj")
 
-        for comp in vinculo.get("competencias", []):
+        for comp in _get_competencias(vinculo):
+            salario = _get_remuneracao(comp)
             c = Competencia(
                 caso_id=caso_id,
-                competencia=comp.get("competencia", ""),
+                competencia=_get_competencia_str(comp),
                 tipo_vinculo=TipoVinculo.CLT,
                 empregador_nome=empregador,
                 empregador_cnpj_cpf=cnpj,
-                remuneracao_bruta=_decimal_safe(comp.get("salario", 0)),
-                base_contribuicao=_decimal_safe(comp.get("salario", 0)),
+                remuneracao_bruta=_decimal_safe(salario),
+                base_contribuicao=_decimal_safe(salario),
                 fonte=FonteDocumento.CTPS,
                 documento_id=documento_id,
                 confianca_extracao=_calcular_confianca(comp),
@@ -177,19 +233,23 @@ def _parse_ctps(dados: dict, caso_id: int, documento_id: Optional[int]) -> List[
 
 def _parse_generico(dados: dict, caso_id: int, documento_id: Optional[int], fonte: FonteDocumento, tipo_vinculo: TipoVinculo) -> List[Competencia]:
     competencias: List[Competencia] = []
-    empregador = dados.get("empregador") or dados.get("empresa") or dados.get("nome_mei") or "Não identificado"
-    cnpj = dados.get("cnpj") or dados.get("cpf")
+    empregador = _get(dados, "empregador", "empresa", "nome_mei", "nome", default="Não identificado")
+    cnpj = _get(dados, "cnpj", "cpf", "cpf_cnpj")
 
-    for comp in dados.get("competencias", []):
+    lista = dados.get("competencias") or dados.get("meses") or dados.get("periodos") or []
+    for comp in lista:
+        rem = _get_remuneracao(comp)
+        base = _get(comp, "base_contribuicao", "base", default=rem)
+        contrib = _get(comp, "valor_inss", "valor_contribuicao", "contribuicao", "inss")
         c = Competencia(
             caso_id=caso_id,
-            competencia=comp.get("competencia", ""),
+            competencia=_get_competencia_str(comp),
             tipo_vinculo=tipo_vinculo,
             empregador_nome=empregador,
             empregador_cnpj_cpf=cnpj,
-            remuneracao_bruta=_decimal_safe(comp.get("remuneracao") or comp.get("salario") or comp.get("valor", 0)),
-            base_contribuicao=_decimal_safe(comp.get("base_contribuicao") or comp.get("remuneracao") or comp.get("valor", 0)),
-            valor_contribuicao=_decimal_safe(comp.get("valor_inss") or comp.get("valor_contribuicao")) if comp.get("valor_inss") or comp.get("valor_contribuicao") else None,
+            remuneracao_bruta=_decimal_safe(rem),
+            base_contribuicao=_decimal_safe(base),
+            valor_contribuicao=_decimal_safe(contrib) if contrib else None,
             fonte=fonte,
             documento_id=documento_id,
             confianca_extracao=_calcular_confianca(comp),
@@ -202,17 +262,17 @@ def _parse_generico(dados: dict, caso_id: int, documento_id: Optional[int], font
 
 def _parse_fgts(dados: dict, caso_id: int, documento_id: Optional[int]) -> List[Competencia]:
     competencias: List[Competencia] = []
-    for vinculo in dados.get("vinculos", []):
-        empregador = vinculo.get("empregador", "Não identificado")
-        cnpj = vinculo.get("cnpj")
-        for comp in vinculo.get("competencias", []):
-            salario = comp.get("salario") or comp.get("remuneracao") or 0
+    for vinculo in _get_vinculos(dados):
+        empregador = _get_empregador(vinculo)
+        cnpj = _get(vinculo, "cnpj", "cpf_cnpj")
+        for comp in _get_competencias(vinculo):
+            salario = _get(comp, "salario", "remuneracao", "salario_calculado", default=0)
             if not salario:
-                dep = comp.get("valor_deposito") or 0
+                dep = _get(comp, "valor_deposito", "deposito", "valor", default=0)
                 salario = float(dep) / 0.08 if dep else 0
             c = Competencia(
                 caso_id=caso_id,
-                competencia=comp.get("competencia", ""),
+                competencia=_get_competencia_str(comp),
                 tipo_vinculo=TipoVinculo.CLT,
                 empregador_nome=empregador,
                 empregador_cnpj_cpf=cnpj,
@@ -230,19 +290,19 @@ def _parse_fgts(dados: dict, caso_id: int, documento_id: Optional[int]) -> List[
 
 def _parse_ctc(dados: dict, caso_id: int, documento_id: Optional[int]) -> List[Competencia]:
     competencias: List[Competencia] = []
-    empregador = dados.get("empregador") or dados.get("orgao_emissor") or "Não identificado"
-    cnpj = dados.get("cnpj")
-    # Detect RPPS from regime or indicadores
-    regime = dados.get("regime", "")
-    indicadores = dados.get("indicadores_vinculo", [])
-    tipo_vinculo = TipoVinculo.RPPS if ("RPPS" in regime or "PRPPS" in indicadores) else TipoVinculo.CLT
+    empregador = _get(dados, "empregador", "orgao_emissor", "orgao", "nome_orgao", default="Não identificado")
+    cnpj = _get(dados, "cnpj", "cpf_cnpj")
+    regime = dados.get("regime") or dados.get("tipo_regime") or ""
+    indicadores = dados.get("indicadores_vinculo") or dados.get("indicadores") or []
+    tipo_vinculo = TipoVinculo.RPPS if ("RPPS" in str(regime) or "PRPPS" in indicadores) else TipoVinculo.CLT
 
-    for comp in dados.get("competencias", []):
-        remuneracao = comp.get("remuneracao") or comp.get("base_contribuicao") or 0
-        base = comp.get("base_contribuicao") or remuneracao
+    lista = dados.get("competencias") or dados.get("remuneracoes") or dados.get("meses") or []
+    for comp in lista:
+        remuneracao = _get_remuneracao(comp)
+        base = _get(comp, "base_contribuicao", "base", default=remuneracao)
         c = Competencia(
             caso_id=caso_id,
-            competencia=comp.get("competencia", ""),
+            competencia=_get_competencia_str(comp),
             tipo_vinculo=tipo_vinculo,
             empregador_nome=empregador,
             empregador_cnpj_cpf=cnpj,
@@ -275,9 +335,21 @@ def extrair(texto: str, tipo: TipoDocumento, caso_id: int, documento_id: Optiona
 
     from ..config import MODEL_ANALISE
     _SONNET_TIPOS = {TipoDocumento.CNIS, TipoDocumento.CTPS, TipoDocumento.CTC, TipoDocumento.FGTS}
-    modelo = MODEL_ANALISE if tipo in _SONNET_TIPOS else MODEL_EXTRACAO
+
+    # C) Usa Haiku quando o texto veio de pdfplumber (estruturado, sem ruído de OCR).
+    # Documentos de imagem (CTPS manuscrita, FGTS escaneado) ficam com Sonnet pela
+    # variabilidade do OCR. Heurística: texto pdfplumber tem densidade alta e sem
+    # marcas de OCR ("  " espaços duplos, linhas com só traços).
+    _e_texto_nativo = len(texto) >= 500 and texto.count("\n") > 10 and "\x0c" not in texto
+    if tipo in _SONNET_TIPOS and not _e_texto_nativo:
+        modelo = MODEL_ANALISE   # Sonnet para OCR (imagens)
+    else:
+        modelo = MODEL_EXTRACAO  # Haiku para texto nativo (rápido)
+
     limite_texto = 30000 if tipo in _SONNET_TIPOS else 8000
     max_tokens = 16000 if tipo in _SONNET_TIPOS else 4096
+
+    logger.info("[EXTRATOR] Modelo selecionado: %s (texto_nativo=%s)", modelo, _e_texto_nativo)
 
     texto_truncado = texto[:limite_texto]
     logger.info(
