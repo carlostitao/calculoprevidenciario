@@ -51,6 +51,7 @@ class App(ctk.CTk):
 
         # Sidebar de casos
         self._sidebar = CasosSidebar(self, width=220, on_select=self._on_caso_selecionado)
+        self._sidebar.set_on_deletar(self._on_caso_deletado)
         self._sidebar.grid(row=1, column=0, sticky="nsew", padx=(8, 0), pady=8)
 
         # Área de abas (área principal)
@@ -99,7 +100,7 @@ class App(ctk.CTk):
         novo = "light" if atual == "dark" else "dark"
         ctk.set_appearance_mode(novo)
 
-    # ── Seleção de caso ──────────────────────────────────────────────────────
+    # ── Seleção / deleção de caso ────────────────────────────────────────────
 
     def _on_caso_selecionado(self, caso: Caso) -> None:
         self._caso_ativo = caso
@@ -109,6 +110,17 @@ class App(ctk.CTk):
         self._panel_conf.carregar_caso(caso)
         self._panel_calc.carregar_caso(caso)
         self._panel_rel.carregar_caso(caso)
+
+    def _on_caso_deletado(self, caso_id: int) -> None:
+        """Limpa todos os painéis quando o caso ativo é deletado."""
+        if self._caso_ativo and self._caso_ativo.id == caso_id:
+            self._caso_ativo = None
+            self._lbl_status.configure(text="Nenhum caso aberto")
+            self._panel_docs.carregar_caso(None)
+            self._panel_comp.carregar_caso(None)
+            self._panel_conf.carregar_caso(None)
+            self._panel_calc.carregar_caso(None)
+            self._panel_rel.carregar_caso(None)
 
     # ── Status e custos AI ───────────────────────────────────────────────────
 

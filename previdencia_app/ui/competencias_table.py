@@ -117,13 +117,23 @@ class CompetenciasTable(ctk.CTkFrame):
 
     def carregar_caso(self, caso) -> None:
         self._caso = caso
-        self._competencias = CompetenciaRepository.buscar_por_caso(caso.id)
+        if caso is None:
+            self._competencias = []
+            self._renderizar([])
+            return
+        self._competencias = sorted(
+            CompetenciaRepository.buscar_por_caso(caso.id),
+            key=lambda c: _comp_key(c.competencia),
+        )
         self._renderizar(self._competencias)
 
     def _renderizar(self, competencias: List[Competencia]) -> None:
         self._tree.delete(*self._tree.get_children())
 
-        for c in competencias:
+        # Garante ordem cronológica sempre que renderiza
+        ordenadas = sorted(competencias, key=lambda c: _comp_key(c.competencia))
+
+        for c in ordenadas:
             flags = self._montar_flags(c)
             valores = (
                 c.competencia,
@@ -191,10 +201,13 @@ class CompetenciasTable(ctk.CTkFrame):
         self._renderizar(filtradas)
 
     def _ordenar(self, coluna: str) -> None:
-        try:
-            self._competencias.sort(key=lambda c: getattr(c, coluna, "") or "")
-        except TypeError:
-            pass
+        # Competência e campos monetários precisam de chave numérica para ordenar certo
+        if coluna == "competencia":
+            self._competencias.sort(key=lambda c: _comp_key(c.competencia))
+        elif coluna in ("remuneracao_bruta", "base_contribuicao", "remuneracao_atualizada"):
+            self._competencias.sort(key=lambda c: float(getattr(c, coluna) or 0))
+        else:
+            self._competencias.sort(key=lambda c: str(getattr(c, coluna, "") or "").lower())
         self._renderizar(self._competencias)
 
     def _on_duplo_clique(self, event) -> None:

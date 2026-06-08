@@ -67,7 +67,12 @@ class DocumentsPanel(ctk.CTkFrame):
 
     def carregar_caso(self, caso) -> None:
         self._caso = caso
-        self._atualizar_lista()
+        self._atualizar_lista() if caso else self._limpar_lista()
+
+    def _limpar_lista(self) -> None:
+        for w in self._scroll.winfo_children():
+            w.destroy()
+        ctk.CTkLabel(self._scroll, text="Selecione ou crie um caso.", text_color="gray").pack(pady=20)
 
     def _atualizar_lista(self) -> None:
         for w in self._scroll.winfo_children():
