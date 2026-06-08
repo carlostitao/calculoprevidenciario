@@ -47,26 +47,110 @@ class AIResult:
 
 
 def limpar_json(texto: str) -> str:
-    """
-    Remove blocos de código Markdown (```json ... ``` ou ``` ... ```) da resposta
-    e quaisquer caracteres antes do primeiro { ou [.
-    Resolve o erro: "Expecting value: line 1 column 1" causado por fences do modelo.
-    """
-    # Remove fence de código (```json, ```JSON, ``` etc.)
+    """Remove markdown fences e texto fora do bloco JSON principal."""
     texto = re.sub(r"```[a-zA-Z]*\n?", "", texto)
     texto = texto.replace("```", "").strip()
 
-    # Descarta qualquer texto antes do primeiro delimitador JSON
     match = re.search(r"[\[{]", texto)
     if match:
         texto = texto[match.start():]
 
-    # Descarta qualquer texto após o último } ou ]
     last_close = max(texto.rfind("}"), texto.rfind("]"))
     if last_close != -1:
         texto = texto[: last_close + 1]
 
     return texto.strip()
+
+
+def _corrigir_json(texto: str) -> str:
+    """Aplica correções heurísticas em JSON malformado retornado pelo modelo."""
+    # Remove comentários de linha (// ...) fora de strings
+    texto = re.sub(r'(?<!["\w])//[^\n]*', '', texto)
+
+    # Remove trailing commas antes de } ou ]
+    texto = re.sub(r',\s*([}\]])', r'\1', texto)
+
+    # Números com vírgula decimal fora de strings: 1.234,56 → 1234.56
+    # Detecta padrão: dígito(s).dígito(s),dígito(s) (formato BR com separador de milhar)
+    def _fix_numero_br(m: re.Match) -> str:
+        s = m.group(0)
+        # Remove pontos de milhar, troca vírgula decimal por ponto
+        s = s.replace(".", "").replace(",", ".")
+        return s
+
+    texto = re.sub(r'\b\d{1,3}(?:\.\d{3})+,\d+\b', _fix_numero_br, texto)
+    # Também trata vírgula decimal simples: 1234,56 → 1234.56 (sem ponto de milhar)
+    texto = re.sub(r'(?<!\d)(\d+),(\d{2})(?!\d)', r'\1.\2', texto)
+
+    return texto
+
+
+def parse_json_robusto(texto: str) -> dict:
+    """
+    Tenta parsear JSON com múltiplas estratégias de correção progressiva.
+    Lança json.JSONDecodeError se todas falharem.
+    """
+    import json
+
+    candidato = limpar_json(texto)
+
+    # Tentativa 1: JSON padrão
+    try:
+        return json.loads(candidato)
+    except json.JSONDecodeError:
+        pass
+
+    # Tentativa 2: após correções heurísticas
+    corrigido = _corrigir_json(candidato)
+    try:
+        return json.loads(corrigido)
+    except json.JSONDecodeError:
+        pass
+
+    # Tentativa 3: truncamento — encontra o último objeto/array fechado de forma válida
+    # Reduz progressivamente pelo último ',' até encontrar JSON válido
+    for separador in ['\n  },\n', '\n    },\n', '},\n', '}']:
+        idx = corrigido.rfind(separador)
+        if idx == -1:
+            continue
+        # Fecha o array e objeto raiz
+        tentativa = corrigido[: idx + separador.rstrip(',\n').__len__()]
+        # Conta chaves/colchetes não fechados e fecha
+        tentativa = _fechar_json_truncado(tentativa)
+        try:
+            return json.loads(tentativa)
+        except json.JSONDecodeError:
+            continue
+
+    # Última tentativa: fecha automaticamente qualquer truncamento
+    fechado = _fechar_json_truncado(corrigido)
+    return json.loads(fechado)
+
+
+def _fechar_json_truncado(texto: str) -> str:
+    """Fecha chaves e colchetes abertos para recuperar JSON truncado."""
+    pilha = []
+    dentro_string = False
+    escape = False
+
+    for ch in texto:
+        if escape:
+            escape = False
+            continue
+        if ch == '\\' and dentro_string:
+            escape = True
+            continue
+        if ch == '"':
+            dentro_string = not dentro_string
+            continue
+        if not dentro_string:
+            if ch in ('{', '['):
+                pilha.append('}' if ch == '{' else ']')
+            elif ch in ('}', ']') and pilha:
+                pilha.pop()
+
+    fechamento = ''.join(reversed(pilha))
+    return texto.rstrip().rstrip(',') + fechamento
 
 
 class AIClient:
