@@ -194,6 +194,16 @@ class DocumentoRepository:
             )
 
     @staticmethod
+    def atualizar_tipo(documento_id: int, tipo: str) -> None:
+        """Persiste o tipo identificado pela IA."""
+        with get_session() as conn:
+            conn.execute(
+                update(documentos_table)
+                .where(documentos_table.c.id == documento_id)
+                .values(tipo=tipo)
+            )
+
+    @staticmethod
     def atualizar_texto(documento_id: int, texto: str) -> None:
         """Salva o texto extraído do documento."""
         with get_session() as conn:

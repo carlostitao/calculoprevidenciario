@@ -56,11 +56,45 @@ def _prompt_para_tipo(tipo: TipoDocumento) -> str:
     return (_PROMPTS_DIR / nome_arquivo).read_text(encoding="utf-8")
 
 
+_PLANO_REAL_YYYYMM = 199407  # julho de 1994
+
+
 def _decimal_safe(valor) -> Decimal:
     try:
         return Decimal(str(valor)).quantize(Decimal("0.01"))
     except (InvalidOperation, TypeError):
         return Decimal("0")
+
+
+def _comp_to_yyyymm(competencia: str) -> int:
+    try:
+        mes, ano = competencia.split("/")
+        return int(ano) * 100 + int(mes)
+    except (ValueError, AttributeError):
+        return 0
+
+
+def _e_pre_real(competencia: str) -> bool:
+    return _comp_to_yyyymm(competencia) < _PLANO_REAL_YYYYMM
+
+
+def _aplicar_regra_pre_real(c: Competencia) -> Competencia:
+    """
+    Competências anteriores a jul/1994 (Plano Real):
+    - Contam tempo de contribuição normalmente
+    - Valores monetários zerados (não entram na média — UI exibe aviso)
+    - descricao_inconsistencia explica o motivo
+    """
+    if _e_pre_real(c.competencia):
+        c.remuneracao_bruta = Decimal("0")
+        c.base_contribuicao = Decimal("0")
+        c.valor_contribuicao = None
+        c.flag_inconsistencia = True
+        c.descricao_inconsistencia = (
+            "Período anterior ao Plano Real (jul/1994): "
+            "conta tempo de contribuição, valor não entra na média salarial."
+        )
+    return c
 
 
 def _calcular_confianca(comp: dict) -> float:
@@ -78,7 +112,7 @@ def _parse_cnis(dados: dict, caso_id: int, documento_id: Optional[int]) -> List[
         cnpj = vinculo.get("cnpj")
 
         for comp in vinculo.get("competencias", []):
-            competencias.append(Competencia(
+            c = Competencia(
                 caso_id=caso_id,
                 competencia=comp.get("competencia", ""),
                 tipo_vinculo=tipo_vinculo,
@@ -92,7 +126,8 @@ def _parse_cnis(dados: dict, caso_id: int, documento_id: Optional[int]) -> List[
                 confianca_extracao=_calcular_confianca(comp),
                 created_at=datetime.now(),
                 updated_at=datetime.now(),
-            ))
+            )
+            competencias.append(_aplicar_regra_pre_real(c))
     return competencias
 
 
@@ -104,9 +139,8 @@ def _parse_ctps(dados: dict, caso_id: int, documento_id: Optional[int]) -> List[
         inicio = vinculo.get("data_admissao", "")
         fim = vinculo.get("data_demissao")
 
-        # Gera competências mensais entre admissão e demissão
         for comp in vinculo.get("competencias", []):
-            competencias.append(Competencia(
+            c = Competencia(
                 caso_id=caso_id,
                 competencia=comp.get("competencia", ""),
                 tipo_vinculo=TipoVinculo.CLT,
@@ -119,7 +153,8 @@ def _parse_ctps(dados: dict, caso_id: int, documento_id: Optional[int]) -> List[
                 confianca_extracao=_calcular_confianca(comp),
                 created_at=datetime.now(),
                 updated_at=datetime.now(),
-            ))
+            )
+            competencias.append(_aplicar_regra_pre_real(c))
     return competencias
 
 
@@ -129,7 +164,7 @@ def _parse_generico(dados: dict, caso_id: int, documento_id: Optional[int], font
     cnpj = dados.get("cnpj") or dados.get("cpf")
 
     for comp in dados.get("competencias", []):
-        competencias.append(Competencia(
+        c = Competencia(
             caso_id=caso_id,
             competencia=comp.get("competencia", ""),
             tipo_vinculo=tipo_vinculo,
@@ -143,7 +178,8 @@ def _parse_generico(dados: dict, caso_id: int, documento_id: Optional[int], font
             confianca_extracao=_calcular_confianca(comp),
             created_at=datetime.now(),
             updated_at=datetime.now(),
-        ))
+        )
+        competencias.append(_aplicar_regra_pre_real(c))
     return competencias
 
 

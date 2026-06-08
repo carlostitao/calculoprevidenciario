@@ -29,16 +29,17 @@ _COLUNAS = [
     ("flags", "Flags", 80),
 ]
 
+# Cores de fundo por fonte — vivas o suficiente para distinguir no tema dark
 _COR_FONTE = {
-    FonteDocumento.CNIS: "#1a3a6b",
-    FonteDocumento.CTPS: "#1a5c2e",
-    FonteDocumento.CTC: "#4a1a7a",
-    FonteDocumento.HOLERITE: "#1a5a5a",
-    FonteDocumento.PRO_LABORE: "#7a3a1a",
-    FonteDocumento.PGDAS: "#5a4a1a",
-    FonteDocumento.DARF: "#5a1a1a",
-    FonteDocumento.FGTS: "#1a4a5a",
-    FonteDocumento.MANUAL: "#7a5a1a",
+    FonteDocumento.CNIS:       "#1a4080",  # azul royal
+    FonteDocumento.CTPS:       "#1a6b35",  # verde escuro vivo
+    FonteDocumento.CTC:        "#6b1a9e",  # roxo
+    FonteDocumento.HOLERITE:   "#0d7a7a",  # teal
+    FonteDocumento.PRO_LABORE: "#a04010",  # laranja queimado
+    FonteDocumento.PGDAS:      "#7a6010",  # dourado escuro
+    FonteDocumento.DARF:       "#8b1a1a",  # vermelho escuro
+    FonteDocumento.FGTS:       "#10558b",  # azul petróleo
+    FonteDocumento.MANUAL:     "#8b5e1a",  # bronze
 }
 
 

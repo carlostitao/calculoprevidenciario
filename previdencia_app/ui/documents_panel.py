@@ -155,6 +155,7 @@ class DocumentsPanel(ctk.CTkFrame):
                 from ..ai.classifier import classificar_documento
                 tipo = classificar_documento(texto)
                 doc.tipo = tipo
+                DocumentoRepository.atualizar_tipo(doc.id, tipo.value)
 
                 from ..ai.extractor import extrair
                 from ..db import CompetenciaRepository
