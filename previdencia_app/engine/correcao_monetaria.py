@@ -1,6 +1,7 @@
 """Atualização monetária pelo INPC via API BCB/SGS, com cache SQLite."""
 from __future__ import annotations
 
+import calendar
 import logging
 from datetime import date, datetime
 from decimal import Decimal, ROUND_HALF_UP
@@ -109,12 +110,8 @@ def _obter_fatores(comp_ini: str, comp_fim: str) -> Dict[str, float]:
         for grupo in chunk_por_anos(faltando, _MAX_ANOS_REQUEST):
             d1 = _competencia_to_date(grupo[0])
             d2 = _competencia_to_date(grupo[-1])
-            # Busca o último dia do mês para d2
-            if d2.month == 12:
-                d2_fim = date(d2.year + 1, 1, 1)
-            else:
-                d2_fim = date(d2.year, d2.month + 1, 1)
-            d2_fim = date(d2_fim.year, d2_fim.month, d2_fim.day - 1)
+            ultimo_dia = calendar.monthrange(d2.year, d2.month)[1]
+            d2_fim = date(d2.year, d2.month, ultimo_dia)
 
             novos = _buscar_fatores_bcb(d1, d2_fim)
             if novos:
