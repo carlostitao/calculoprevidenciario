@@ -112,22 +112,39 @@ def _parse_cnis(dados: dict, caso_id: int, documento_id: Optional[int]) -> List[
         cnpj = vinculo.get("cnpj")
 
         for comp in vinculo.get("competencias", []):
+            # Formato C: remuneracao vem de salario_contribuicao
+            remuneracao = (
+                comp.get("remuneracao")
+                or comp.get("salario_contribuicao")
+                or comp.get("base_contribuicao")
+                or 0
+            )
+            base = comp.get("base_contribuicao") or remuneracao
+            valor_contrib = comp.get("valor_contribuicao") or comp.get("contribuicao")
+            pendencia = bool(comp.get("pendencia", False))
+            indicadores = comp.get("indicadores", [])
+            # Qualquer indicador que não seja puramente informativo → pendência
+            if indicadores and not pendencia:
+                pendencia = True
+
             c = Competencia(
                 caso_id=caso_id,
                 competencia=comp.get("competencia", ""),
                 tipo_vinculo=tipo_vinculo,
                 empregador_nome=empregador,
                 empregador_cnpj_cpf=cnpj,
-                remuneracao_bruta=_decimal_safe(comp.get("remuneracao", 0)),
-                base_contribuicao=_decimal_safe(comp.get("base_contribuicao") or comp.get("remuneracao", 0)),
+                remuneracao_bruta=_decimal_safe(remuneracao),
+                base_contribuicao=_decimal_safe(base),
+                valor_contribuicao=_decimal_safe(valor_contrib) if valor_contrib else None,
                 fonte=FonteDocumento.CNIS,
                 documento_id=documento_id,
-                flag_pendencia_cnis=bool(comp.get("pendencia", False)),
+                flag_pendencia_cnis=pendencia,
                 confianca_extracao=_calcular_confianca(comp),
                 created_at=datetime.now(),
                 updated_at=datetime.now(),
             )
             competencias.append(_aplicar_regra_pre_real(c))
+    # beneficios are intentionally ignored — not contributive periods
     return competencias
 
 
@@ -183,6 +200,64 @@ def _parse_generico(dados: dict, caso_id: int, documento_id: Optional[int], font
     return competencias
 
 
+def _parse_fgts(dados: dict, caso_id: int, documento_id: Optional[int]) -> List[Competencia]:
+    competencias: List[Competencia] = []
+    for vinculo in dados.get("vinculos", []):
+        empregador = vinculo.get("empregador", "Não identificado")
+        cnpj = vinculo.get("cnpj")
+        for comp in vinculo.get("competencias", []):
+            salario = comp.get("salario") or comp.get("remuneracao") or 0
+            if not salario:
+                dep = comp.get("valor_deposito") or 0
+                salario = float(dep) / 0.08 if dep else 0
+            c = Competencia(
+                caso_id=caso_id,
+                competencia=comp.get("competencia", ""),
+                tipo_vinculo=TipoVinculo.CLT,
+                empregador_nome=empregador,
+                empregador_cnpj_cpf=cnpj,
+                remuneracao_bruta=_decimal_safe(salario),
+                base_contribuicao=_decimal_safe(salario),
+                fonte=FonteDocumento.FGTS,
+                documento_id=documento_id,
+                confianca_extracao=_calcular_confianca(comp),
+                created_at=datetime.now(),
+                updated_at=datetime.now(),
+            )
+            competencias.append(_aplicar_regra_pre_real(c))
+    return competencias
+
+
+def _parse_ctc(dados: dict, caso_id: int, documento_id: Optional[int]) -> List[Competencia]:
+    competencias: List[Competencia] = []
+    empregador = dados.get("empregador") or dados.get("orgao_emissor") or "Não identificado"
+    cnpj = dados.get("cnpj")
+    # Detect RPPS from regime or indicadores
+    regime = dados.get("regime", "")
+    indicadores = dados.get("indicadores_vinculo", [])
+    tipo_vinculo = TipoVinculo.RPPS if ("RPPS" in regime or "PRPPS" in indicadores) else TipoVinculo.CLT
+
+    for comp in dados.get("competencias", []):
+        remuneracao = comp.get("remuneracao") or comp.get("base_contribuicao") or 0
+        base = comp.get("base_contribuicao") or remuneracao
+        c = Competencia(
+            caso_id=caso_id,
+            competencia=comp.get("competencia", ""),
+            tipo_vinculo=tipo_vinculo,
+            empregador_nome=empregador,
+            empregador_cnpj_cpf=cnpj,
+            remuneracao_bruta=_decimal_safe(remuneracao),
+            base_contribuicao=_decimal_safe(base),
+            fonte=FonteDocumento.CTC,
+            documento_id=documento_id,
+            confianca_extracao=_calcular_confianca(comp),
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+        )
+        competencias.append(_aplicar_regra_pre_real(c))
+    return competencias
+
+
 def extrair(texto: str, tipo: TipoDocumento, caso_id: int, documento_id: Optional[int] = None) -> List[Competencia]:
     """
     Extrai competências estruturadas do texto de um documento.
@@ -198,10 +273,15 @@ def extrair(texto: str, tipo: TipoDocumento, caso_id: int, documento_id: Optiona
         logger.error("Sem prompt para %s: %s", tipo, exc)
         return []
 
+    from ..config import MODEL_ANALISE
+    _SONNET_TIPOS = {TipoDocumento.CNIS, TipoDocumento.CTPS, TipoDocumento.CTC, TipoDocumento.FGTS}
+    modelo = MODEL_ANALISE if tipo in _SONNET_TIPOS else MODEL_EXTRACAO
+    limite_texto = 30000 if tipo in _SONNET_TIPOS else 8000
+
     result = get_client().chamar(
         system=system,
-        user=f"Extraia os dados do seguinte documento:\n\n{texto[:8000]}",
-        modelo=MODEL_EXTRACAO,
+        user=f"Extraia os dados do seguinte documento:\n\n{texto[:limite_texto]}",
+        modelo=modelo,
         operacao=f"extracao_{tipo.value.lower()}",
         caso_id=caso_id,
     )
@@ -225,7 +305,7 @@ def extrair(texto: str, tipo: TipoDocumento, caso_id: int, documento_id: Optiona
         if tipo == TipoDocumento.CTPS:
             return _parse_ctps(dados, caso_id, documento_id)
         if tipo == TipoDocumento.CTC:
-            return _parse_generico(dados, caso_id, documento_id, fonte, TipoVinculo.RPPS)
+            return _parse_ctc(dados, caso_id, documento_id)
         if tipo == TipoDocumento.HOLERITE:
             return _parse_generico(dados, caso_id, documento_id, fonte, TipoVinculo.CLT)
         if tipo == TipoDocumento.PRO_LABORE:
@@ -235,7 +315,7 @@ def extrair(texto: str, tipo: TipoDocumento, caso_id: int, documento_id: Optiona
         if tipo == TipoDocumento.DARF:
             return _parse_generico(dados, caso_id, documento_id, fonte, TipoVinculo.AUTONOMO)
         if tipo == TipoDocumento.FGTS:
-            return _parse_ctps(dados, caso_id, documento_id)
+            return _parse_fgts(dados, caso_id, documento_id)
     except Exception as exc:
         logger.error("Erro ao parsear resposta de %s: %s", tipo, exc)
 

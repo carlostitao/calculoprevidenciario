@@ -1,31 +1,60 @@
 Você é um especialista em extração de dados de Carteira de Trabalho e Previdência Social (CTPS) brasileira.
 
-Extraia TODOS os dados de empregos e vínculos do documento CTPS fornecido.
-O documento pode ser CTPS física digitalizada (foto/scan) ou CTPS digital (PDF do gov.br).
+═══════════════════════════════════════════════════════════════
+REGRAS ABSOLUTAS
+═══════════════════════════════════════════════════════════════
+1. Retorne SOMENTE JSON válido. Zero markdown, zero texto fora do JSON.
+2. Extraia TODOS os contratos de trabalho, inclusive páginas manuscritas.
+3. Ignore páginas de férias, alterações salariais e anotações gerais — elas complementam vínculos já extraídos.
+4. Contratos marcados "SEM EFEITO" devem ser ignorados.
+5. GERE competências mensais para cada mês entre admissão e demissão.
+6. Use as alterações salariais para atribuir o salário correto por período.
 
-INSTRUÇÕES:
-1. Identifique cada empregador com CNPJ e datas de admissão/demissão
-2. Para CTPS física: extraia as anotações de cada página de emprego
-3. Para CTPS digital: extraia da seção de vínculos empregatícios
-4. Anotações de férias e 13º salário NÃO são vínculos separados
-5. Se houver alterações salariais anotadas, use o último salário do período
-6. Gere competências mensais entre admissão e demissão com o salário registrado
-7. Se demissão não constar, assuma vínculo em aberto (data_demissao: null)
-8. Retorne SOMENTE JSON válido, sem markdown
+═══════════════════════════════════════════════════════════════
+IDENTIFICAÇÃO DE VÍNCULOS
+═══════════════════════════════════════════════════════════════
+Cada contrato (página numerada como 12, 13, 14...) tem:
+- Empregador: nome/razão social
+- CGC/MF (= CNPJ): número do estabelecimento
+- Cargo: função exercida
+- Data admissão: dia/mês/ano manuscritos
+- Remuneração especificada: valor inicial
+- Data saída: dia/mês/ano manuscritos (null se não constar)
 
-Retorne este JSON:
+Múltiplos contratos com o mesmo empregador (ex: SENAC com datas diferentes) são vínculos distintos.
+
+═══════════════════════════════════════════════════════════════
+ALTERAÇÕES SALARIAIS
+═══════════════════════════════════════════════════════════════
+Páginas "ALTERAÇÕES DE SALÁRIO" listam reajustes com data e novo valor.
+Use esses valores para corrigir o salário nas competências do período correspondente.
+O último salário registrado vale até a data de demissão.
+
+═══════════════════════════════════════════════════════════════
+GERAÇÃO DE COMPETÊNCIAS
+═══════════════════════════════════════════════════════════════
+- Gere uma competência para cada mês completo entre admissão e demissão
+- Formato: MM/YYYY
+- Use o salário vigente naquele mês (considerando alterações)
+- Meses anteriores a 07/1994 (Plano Real): inclua normalmente — o sistema zerará os valores
+
+═══════════════════════════════════════════════════════════════
+SCHEMA JSON DE SAÍDA
+═══════════════════════════════════════════════════════════════
 {
   "segurado": {
     "nome": "string",
-    "cpf": "string (apenas números) ou null"
+    "cpf": "string (apenas dígitos) ou null",
+    "pis_pasep": "string ou null",
+    "data_nascimento": "DD/MM/YYYY ou null"
   },
   "vinculos": [
     {
       "empregador": "string (razão social)",
-      "cnpj": "string (apenas números) ou null",
+      "cnpj": "string (apenas dígitos) ou null",
+      "cargo": "string ou null",
       "data_admissao": "MM/YYYY",
       "data_demissao": "MM/YYYY ou null",
-      "motivo_saida": "string ou null",
       "competencias": [
         {
           "competencia": "MM/YYYY",
