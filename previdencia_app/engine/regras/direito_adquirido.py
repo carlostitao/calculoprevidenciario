@@ -10,6 +10,7 @@ from ...models.caso import Caso, Sexo
 from ..periodos import calcular_tempo_contributivo
 from .media_contribuicoes import calcular_media_80_maiores
 from .fator_previdenciario import calcular_fator_previdenciario
+from ._helpers import detalhe_tempo
 
 _REFORMA = date(2019, 11, 13)
 _TEMPO_MIN_H = 35 * 12
@@ -72,5 +73,6 @@ def calcular(caso: Caso, competencias: List[Competencia], data_req: date) -> dic
             "fator_aplicado": str(fator_aplicavel),
             "nota": "Fator previdenciário ignorado se < 1 (interpretação mais favorável ao segurado)",
             "media_regra": media_result.regra_aplicada,
+            "tempo_contributivo": detalhe_tempo(tempo),
         },
     }

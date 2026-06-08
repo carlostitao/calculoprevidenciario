@@ -10,6 +10,7 @@ from ....models.caso import Caso, Sexo
 from ...periodos import calcular_tempo_contributivo
 from ..media_contribuicoes import calcular_media_100
 from ..fator_previdenciario import calcular_fator_previdenciario
+from .._helpers import detalhe_tempo
 
 _REFORMA = date(2019, 11, 13)
 _TEMPO_MIN_H = 35 * 12
@@ -90,5 +91,6 @@ def calcular(caso: Caso, competencias: List[Competencia], data_req: date) -> dic
             "pedagio_meses": pedagio,
             "fator_formula": fator_result.formula_detalhada,
             "coeficiente_pct": float(coeficiente * 100),
+            "tempo_contributivo": detalhe_tempo(tempo_atual),
         },
     }

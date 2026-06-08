@@ -9,6 +9,7 @@ from ....models import Competencia
 from ....models.caso import Caso, Sexo
 from ...periodos import calcular_tempo_contributivo
 from ..media_contribuicoes import calcular_media_100
+from .._helpers import detalhe_tempo
 
 
 def _idade_minima(sexo: Sexo, ano_req: int) -> int:
@@ -69,5 +70,6 @@ def calcular(caso: Caso, competencias: List[Competencia], data_req: date) -> dic
             "idade_minima_necessaria": _idade_minima(caso.sexo, data_req.year),
             "anos_tc": float(anos_tc),
             "coeficiente_pct": float(coeficiente * 100),
+            "tempo_contributivo": detalhe_tempo(tempo),
         },
     }

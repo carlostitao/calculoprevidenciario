@@ -11,6 +11,7 @@ from ....models.caso import Caso, Sexo
 from ...periodos import calcular_tempo_contributivo
 from ..media_contribuicoes import calcular_media_100
 from ..fator_previdenciario import calcular_fator_previdenciario
+from .._helpers import detalhe_tempo
 
 
 # Pontos mínimos por ano (2019-2033 e posteriores)
@@ -84,6 +85,7 @@ def calcular(caso: Caso, competencias: List[Competencia], data_req: date) -> dic
             "anos_tc": float(anos_tc),
             "idade": float(idade),
             "coeficiente_pct": float(coeficiente * 100),
+            "tempo_contributivo": detalhe_tempo(tempo),
             "media_result": {
                 "media": str(media_result.media),
                 "competencias_consideradas": media_result.competencias_consideradas,
