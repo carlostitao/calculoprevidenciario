@@ -184,7 +184,14 @@ def atualizar_lote(competencias, data_referencia: str) -> list:
 
     hoje = date.today()
     atualizadas = []
+    sem_fator = 0
+    base_zero = 0
     for c in competencias:
+        if not c.base_contribuicao or c.base_contribuicao == Decimal("0"):
+            base_zero += 1
+            c.remuneracao_atualizada = Decimal("0")
+            atualizadas.append(c)
+            continue
         try:
             fator = calcular_fator_acumulado(c.competencia, data_referencia)
             c.remuneracao_atualizada = (c.base_contribuicao * fator).quantize(
@@ -193,6 +200,13 @@ def atualizar_lote(competencias, data_referencia: str) -> list:
             c.fator_correcao = fator
             c.data_calculo_correcao = hoje
         except Exception as exc:
-            logger.warning("Não foi possível atualizar %s: %s", c.competencia, exc)
+            sem_fator += 1
+            logger.debug("Sem fator INPC para %s: %s — mantendo valor nominal", c.competencia, exc)
+            c.remuneracao_atualizada = c.base_contribuicao
         atualizadas.append(c)
+
+    total = len(atualizadas)
+    ok = total - sem_fator - base_zero
+    logger.info("[INPC] Lote: %d total | %d atualizados | %d sem fator | %d base=zero",
+                total, ok, sem_fator, base_zero)
     return atualizadas
