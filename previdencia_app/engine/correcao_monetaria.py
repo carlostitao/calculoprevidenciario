@@ -29,6 +29,21 @@ def _date_to_competencia(d: date) -> str:
     return d.strftime("%m/%Y")
 
 
+def _parse_lista_bcb(dados) -> Dict[str, float]:
+    """Converte lista de itens BCB em {MM/YYYY: variacao_decimal}."""
+    if not isinstance(dados, list):
+        return {}
+    resultado: Dict[str, float] = {}
+    for item in dados:
+        try:
+            partes = item["data"].split("/")
+            comp = f"{partes[1]}/{partes[2]}"
+            resultado[comp] = float(item["valor"]) / 100.0
+        except (KeyError, IndexError, ValueError, TypeError) as exc:
+            logger.debug("Item BCB ignorado (%s): %s", exc, item)
+    return resultado
+
+
 def _buscar_fatores_bcb(data_ini: date, data_fim: date) -> Dict[str, float]:
     """Consulta a API BCB/SGS e retorna {MM/YYYY: variacao_decimal}."""
     url = (
@@ -46,17 +61,16 @@ def _buscar_fatores_bcb(data_ini: date, data_fim: date) -> Dict[str, float]:
         return {}
 
     if not isinstance(dados, list):
-        logger.warning("BCB retornou resposta inesperada (não é lista): %s", str(dados)[:200])
+        # API retornou erro em JSON (HTTP 200 com corpo de erro)
+        logger.warning("BCB sem dados para %s-%s: %s",
+                       data_ini.strftime(_BCB_DATE_FMT),
+                       data_fim.strftime(_BCB_DATE_FMT),
+                       str(dados.get("erro", dados))[:120])
         return {}
 
-    resultado: Dict[str, float] = {}
-    for item in dados:
-        try:
-            partes = item["data"].split("/")
-            comp = f"{partes[1]}/{partes[2]}"
-            resultado[comp] = float(item["valor"]) / 100.0
-        except (KeyError, IndexError, ValueError, TypeError) as exc:
-            logger.debug("Item BCB ignorado (%s): %s", exc, item)
+    resultado = _parse_lista_bcb(dados)
+    logger.debug("BCB retornou %d fatores para %s-%s",
+                 len(resultado), data_ini.strftime(_BCB_DATE_FMT), data_fim.strftime(_BCB_DATE_FMT))
     return resultado
 
 
@@ -94,12 +108,16 @@ def _obter_fatores(comp_ini: str, comp_fim: str) -> Dict[str, float]:
     d_ini = _competencia_to_date(comp_ini)
     d_fim = _competencia_to_date(comp_fim)
 
-    # A API BCB não tem dados de meses futuros — limita ao mês atual
+    # INPC é publicado pelo IBGE entre os dias 8-11 do mês seguinte.
+    # Usar mês atual como limite é inseguro; limite seguro = 2 meses atrás.
     hoje = date.today()
-    mes_atual = date(hoje.year, hoje.month, 1)
-    if d_fim > mes_atual:
-        logger.debug("INPC: data_fim %s futura, limitando a %s", comp_fim, _date_to_competencia(mes_atual))
-        d_fim = mes_atual
+    if hoje.month <= 2:
+        limite_seguro = date(hoje.year - 1, 10 + hoje.month, 1)
+    else:
+        limite_seguro = date(hoje.year, hoje.month - 2, 1)
+    if d_fim > limite_seguro:
+        logger.debug("INPC: data_fim %s além do disponível, limitando a %s", comp_fim, _date_to_competencia(limite_seguro))
+        d_fim = limite_seguro
 
     # Gera lista de todas as competências necessárias
     competencias: List[str] = []
