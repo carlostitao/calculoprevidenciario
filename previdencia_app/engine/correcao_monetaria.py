@@ -45,12 +45,18 @@ def _buscar_fatores_bcb(data_ini: date, data_fim: date) -> Dict[str, float]:
         logger.error("Erro ao consultar BCB: %s", exc)
         return {}
 
+    if not isinstance(dados, list):
+        logger.warning("BCB retornou resposta inesperada (não é lista): %s", str(dados)[:200])
+        return {}
+
     resultado: Dict[str, float] = {}
     for item in dados:
-        # data no formato "DD/MM/YYYY" → MM/YYYY
-        partes = item["data"].split("/")
-        comp = f"{partes[1]}/{partes[2]}"
-        resultado[comp] = float(item["valor"]) / 100.0
+        try:
+            partes = item["data"].split("/")
+            comp = f"{partes[1]}/{partes[2]}"
+            resultado[comp] = float(item["valor"]) / 100.0
+        except (KeyError, IndexError, ValueError, TypeError) as exc:
+            logger.debug("Item BCB ignorado (%s): %s", exc, item)
     return resultado
 
 
@@ -87,6 +93,13 @@ def _obter_fatores(comp_ini: str, comp_fim: str) -> Dict[str, float]:
     """
     d_ini = _competencia_to_date(comp_ini)
     d_fim = _competencia_to_date(comp_fim)
+
+    # A API BCB não tem dados de meses futuros — limita ao mês atual
+    hoje = date.today()
+    mes_atual = date(hoje.year, hoje.month, 1)
+    if d_fim > mes_atual:
+        logger.debug("INPC: data_fim %s futura, limitando a %s", comp_fim, _date_to_competencia(mes_atual))
+        d_fim = mes_atual
 
     # Gera lista de todas as competências necessárias
     competencias: List[str] = []
