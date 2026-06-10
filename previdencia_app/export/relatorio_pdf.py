@@ -283,6 +283,98 @@ def _secao_inconsistencias(confronto, est: dict) -> list:
     return items
 
 
+def gerar_resumo_mensal_pdf(caso: Caso, linhas: list, data_ref: str) -> str:
+    """
+    Gera PDF com o resumo mensal de contribuições (teto, cortes, correção INPC).
+    `linhas` é a lista de tuplas (comp, fontes, soma_base, teto_epoca, corte,
+    base_efetiva, base_corrigida, teto_corrigido, foi_cortado).
+    Retorna o caminho do arquivo gerado.
+    """
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    nome_arquivo = f"resumo_mensal_{caso.cpf}_{ts}.pdf"
+    caminho = str(_RELATORIOS_DIR / nome_arquivo)
+
+    doc = SimpleDocTemplate(
+        caminho, pagesize=A4,
+        rightMargin=1.5 * cm, leftMargin=1.5 * cm,
+        topMargin=2.5 * cm, bottomMargin=2 * cm,
+    )
+
+    est = _estilos()
+    story = []
+
+    # Cabeçalho
+    story.append(Paragraph("RESUMO MENSAL DE CONTRIBUIÇÕES", est["titulo"]))
+    story.append(HRFlowable(width="100%", thickness=2, color=_AZUL))
+    story.append(Spacer(1, 0.3 * cm))
+    story.append(Paragraph(f"<b>Segurado:</b> {caso.nome}  |  <b>CPF:</b> {_fmt_cpf(caso.cpf)}", est["normal"]))
+    story.append(Paragraph(f"<b>Data de referência INPC:</b> {data_ref}", est["normal"]))
+    story.append(Paragraph(f"<b>Total de competências:</b> {len(linhas)}", est["normal"]))
+
+    n_cortados = sum(1 for l in linhas if l[8])
+    if n_cortados:
+        story.append(Paragraph(
+            f"⚠  {n_cortados} competência(s) com corte de teto — base efetiva inferior à soma das fontes.",
+            est["aviso"],
+        ))
+    story.append(Spacer(1, 0.4 * cm))
+
+    # Legenda de cores
+    story.append(Paragraph(
+        "Linhas destacadas em laranja indicam meses em que a soma das contribuições excedeu o teto do RGPS.",
+        est["pequeno"],
+    ))
+    story.append(Spacer(1, 0.3 * cm))
+
+    # Tabela principal
+    _LARANJA = colors.HexColor("#c87000")
+    _FUNDO_CORTE = colors.HexColor("#fff3dc")
+
+    cabecalho = [
+        "Competência", "Fontes / Registros", "Base somada",
+        "Teto época", "Corte", "Base efetiva",
+        "Base corrig.\nINPC", "Teto corrig.\nINPC",
+    ]
+    dados = [cabecalho]
+    estilos_linhas = []
+
+    for i, linha in enumerate(linhas):
+        comp, fontes, soma_base, teto_epoca, corte, base_efetiva, base_corrigida, teto_corrigido, foi_cortado = linha
+        dados.append([comp, fontes, soma_base, teto_epoca, corte, base_efetiva, base_corrigida, teto_corrigido])
+        row = i + 1
+        if foi_cortado:
+            estilos_linhas.append(("BACKGROUND", (0, row), (-1, row), _FUNDO_CORTE))
+            estilos_linhas.append(("TEXTCOLOR", (0, row), (-1, row), _LARANJA))
+
+    col_widths = [1.8 * cm, 4.2 * cm, 2.4 * cm, 2.3 * cm, 2.3 * cm, 2.4 * cm, 2.4 * cm, 2.4 * cm]
+    tabela = Table(dados, colWidths=col_widths, repeatRows=1)
+    tabela.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), _AZUL),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, 0), 8),
+        ("FONTSIZE", (0, 1), (-1, -1), 8),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [_CINZA_CLARO, colors.white]),
+        ("GRID", (0, 0), (-1, -1), 0.4, colors.lightgrey),
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("ALIGN", (1, 1), (1, -1), "LEFT"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        *estilos_linhas,
+    ]))
+
+    story.append(tabela)
+    story.append(Spacer(1, 0.5 * cm))
+    story.append(Paragraph(
+        "Base corrigida INPC = base efetiva trazida a valor presente na data de referência. "
+        "Teto corrigido INPC = teto histórico atualizado pela mesma variação do INPC.",
+        est["pequeno"],
+    ))
+
+    doc.build(story, onLaterPages=_rodape, onFirstPage=_rodape)
+    logger.info("Resumo mensal PDF gerado: %s", caminho)
+    return caminho
+
+
 def _fmt_cpf(cpf: str) -> str:
     d = "".join(c for c in cpf if c.isdigit())
     if len(d) == 11:

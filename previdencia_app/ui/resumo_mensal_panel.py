@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import logging
+import subprocess
+import sys
 import threading
 import tkinter as tk
 from datetime import date
@@ -52,8 +54,8 @@ class ResumoMensalPanel(ctk.CTkFrame):
         super().__init__(parent, **kwargs)
         self._app = app
         self._caso = None
-        # Dados brutos por competência para o popup de detalhe
         self._por_comp: Dict[str, List[Competencia]] = {}
+        self._linhas: list = []
         self._build()
 
     # ── Layout ──────────────────────────────────────────────────────────────
@@ -69,6 +71,10 @@ class ResumoMensalPanel(ctk.CTkFrame):
 
         ctk.CTkButton(barra, text="Gerar resumo", width=120,
                       command=self._gerar).pack(side="left", padx=8)
+
+        self._btn_pdf = ctk.CTkButton(barra, text="Exportar PDF", width=120,
+                                      command=self._exportar_pdf, state="disabled")
+        self._btn_pdf.pack(side="left", padx=4)
 
         self._lbl_status = ctk.CTkLabel(
             barra, text="Selecione um caso e clique em Gerar resumo.",
@@ -143,7 +149,9 @@ class ResumoMensalPanel(ctk.CTkFrame):
     def carregar_caso(self, caso) -> None:
         self._caso = caso
         self._por_comp.clear()
+        self._linhas.clear()
         self._tree.delete(*self._tree.get_children())
+        self._btn_pdf.configure(state="disabled")
         self._lbl_status.configure(
             text="Clique em 'Gerar resumo' para calcular." if caso
             else "Selecione um caso e clique em Gerar resumo.",
@@ -222,6 +230,8 @@ class ResumoMensalPanel(ctk.CTkFrame):
     def _renderizar(self, linhas: list, por_comp: dict, n_cortados: int) -> None:
         self._tree.delete(*self._tree.get_children())
         self._por_comp = por_comp
+        self._linhas = linhas
+        self._btn_pdf.configure(state="normal" if linhas else "disabled")
 
         total = len(linhas)
         msg = f"{total} meses  —  clique em uma linha para detalhar"
@@ -237,6 +247,44 @@ class ResumoMensalPanel(ctk.CTkFrame):
             tag = ("cortado" if foi_cortado else "normal") if i % 2 == 0 \
                   else ("cortado_alt" if foi_cortado else "normal_alt")
             self._tree.insert("", "end", values=valores, tags=(tag,))
+
+    # ── Exportar PDF ─────────────────────────────────────────────────────────
+
+    def _exportar_pdf(self) -> None:
+        if not self._caso or not self._linhas:
+            return
+        data_ref = self._entry_data.get().strip()
+        self._btn_pdf.configure(state="disabled", text="Gerando…")
+
+        def _trabalho() -> None:
+            try:
+                from ..export.relatorio_pdf import gerar_resumo_mensal_pdf
+                caminho = gerar_resumo_mensal_pdf(self._caso, self._linhas, data_ref)
+                self._app.after(0, lambda: self._pos_pdf(caminho, None))
+            except Exception as exc:
+                self._app.after(0, lambda: self._pos_pdf(None, exc))
+
+        threading.Thread(target=_trabalho, daemon=True).start()
+
+    def _pos_pdf(self, caminho: Optional[str], erro) -> None:
+        self._btn_pdf.configure(state="normal", text="Exportar PDF")
+        if erro:
+            self._lbl_status.configure(
+                text=f"Erro ao gerar PDF: {erro}", text_color="red"
+            )
+            return
+        self._lbl_status.configure(
+            text=f"PDF gerado: {caminho}", text_color="#2ecc71"
+        )
+        try:
+            if sys.platform == "win32":
+                subprocess.Popen(["start", "", caminho], shell=True)
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", caminho])
+            else:
+                subprocess.Popen(["xdg-open", caminho])
+        except Exception:
+            pass
 
     # ── Popup de detalhe ─────────────────────────────────────────────────────
 
