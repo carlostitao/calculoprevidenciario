@@ -144,7 +144,10 @@ def _agrupar_concomitantes(competencias: List[Competencia]) -> List[Competencia]
     Agrupa competências do mesmo mês de fontes diferentes (concomitância).
     Regra (Lei 13.846/2019 + STJ): soma dos salários de contribuição,
     limitada ao teto da competência. O tempo conta apenas uma vez.
+    Retorna cópias — nunca muta os objetos originais.
     """
+    from copy import copy
+
     por_competencia: Dict[str, List[Competencia]] = {}
     for c in competencias:
         por_competencia.setdefault(c.competencia, []).append(c)
@@ -155,12 +158,12 @@ def _agrupar_concomitantes(competencias: List[Competencia]) -> List[Competencia]
             resultado.append(grupo[0])
             continue
 
-        # Soma as bases de contribuição
+        # Soma as bases de contribuição originais (usa base_contribuicao — não remuneracao_atualizada)
         soma = sum((c.base_contribuicao for c in grupo), Decimal("0"))
         soma_limitada = _cap_teto(soma, comp)
 
-        # Usa o primeiro registro como representante e ajusta a base
-        principal = grupo[0]
+        # Copia o primeiro registro como representante e ajusta a base
+        principal = copy(grupo[0])
         principal.base_contribuicao = soma_limitada
         principal.remuneracao_atualizada = None  # força recálculo INPC com valor somado
         logger.debug(
@@ -192,27 +195,27 @@ def _filtrar_desde_julho_1994(competencias: List[Competencia]) -> List[Competenc
 def _garantir_atualizacao(competencias: List[Competencia], data_ref: str) -> List[Competencia]:
     """
     Para cada competência:
-    1. Aplica cap do teto antes da correção
-    2. Atualiza pelo INPC até data_ref
+    1. Aplica cap do teto antes da correção (em cópia — não muta originais)
+    2. Atualiza pelo INPC até data_ref (sempre recalcula para garantir data correta)
     """
+    from copy import copy
+
     atualizadas = []
     for c in competencias:
-        # Cap no teto da competência antes de corrigir
         base_capada = _cap_teto(c.base_contribuicao, c.competencia)
         if base_capada != c.base_contribuicao:
             logger.debug("[TETO] %s: %.2f → %.2f (teto=%.2f)",
                          c.competencia, c.base_contribuicao, base_capada,
                          teto_para_competencia(c.competencia))
+            c = copy(c)
             c.base_contribuicao = base_capada
-            c.remuneracao_atualizada = None  # recalcular com valor correto
 
-        if c.remuneracao_atualizada is None:
-            try:
-                c.remuneracao_atualizada = atualizar_inpc(c.base_contribuicao, c.competencia, data_ref)
-            except Exception as exc:
-                logger.warning("[INPC] Sem fator para %s (%s) — usando valor nominal",
-                               c.competencia, exc)
-                c.remuneracao_atualizada = c.base_contribuicao
+        try:
+            c.remuneracao_atualizada = atualizar_inpc(c.base_contribuicao, c.competencia, data_ref)
+        except Exception as exc:
+            logger.warning("[INPC] Sem fator para %s (%s) — usando valor nominal",
+                           c.competencia, exc)
+            c.remuneracao_atualizada = c.base_contribuicao
 
         atualizadas.append(c)
     return atualizadas

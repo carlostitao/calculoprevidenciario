@@ -66,15 +66,13 @@ def calcular(caso: Caso, competencias: List[Competencia], data_req: date) -> dic
 
     fator_result = calcular_fator_previdenciario(anos_tc, idade, sexo=caso.sexo.value)
 
-    # Fator previdenciário obrigatório no pedágio 50%
+    # Fator previdenciário obrigatório no pedágio 50% (Art. 17 EC 103/2019)
+    # RMI = 100% do SB — regra "nos termos da Lei 8.213" (Art. 50), sem coeficiente 60%+2%
     salario_beneficio = (media_result.media * fator_result.fator).quantize(
         Decimal("0.01"), rounding=ROUND_HALF_UP
     )
-
-    anos_min = 35 if caso.sexo == Sexo.MASCULINO else 30
-    excedente = max(Decimal("0"), anos_tc - Decimal(str(anos_min)))
-    coeficiente = min(Decimal("1.0"), Decimal("0.60") + excedente * Decimal("0.02"))
-    rmi = (salario_beneficio * coeficiente).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    coeficiente = Decimal("1.0")
+    rmi = salario_beneficio
 
     return {
         "regra": "Pedágio 50% (Art. 17 EC 103/2019)",
@@ -90,7 +88,7 @@ def calcular(caso: Caso, competencias: List[Competencia], data_req: date) -> dic
             "meses_faltavam_na_reforma": faltavam,
             "pedagio_meses": pedagio,
             "fator_formula": fator_result.formula_detalhada,
-            "coeficiente_pct": float(coeficiente * 100),
+            "coeficiente_pct": 100.0,
             "tempo_contributivo": detalhe_tempo(tempo_atual),
         },
     }
