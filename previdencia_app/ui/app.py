@@ -16,6 +16,7 @@ from .competencias_table import CompetenciasTable
 from .confronto_panel import ConfrontoPanel
 from .calculo_panel import CalculoPanel
 from .relatorio_panel import RelatorioPanel
+from .resumo_mensal_panel import ResumoMensalPanel
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +59,7 @@ class App(ctk.CTk):
         self._tabs = ctk.CTkTabview(self)
         self._tabs.grid(row=1, column=1, sticky="nsew", padx=8, pady=8)
 
-        for nome in ["Documentos", "Competências", "Confronto", "Cálculo", "Relatório"]:
+        for nome in ["Documentos", "Competências", "Confronto", "Cálculo", "Resumo Mensal", "Relatório"]:
             self._tabs.add(nome)
 
         self._panel_docs = DocumentsPanel(self._tabs.tab("Documentos"), app=self)
@@ -72,6 +73,9 @@ class App(ctk.CTk):
 
         self._panel_calc = CalculoPanel(self._tabs.tab("Cálculo"), app=self)
         self._panel_calc.pack(fill="both", expand=True)
+
+        self._panel_resumo = ResumoMensalPanel(self._tabs.tab("Resumo Mensal"), app=self)
+        self._panel_resumo.pack(fill="both", expand=True)
 
         self._panel_rel = RelatorioPanel(self._tabs.tab("Relatório"), app=self)
         self._panel_rel.pack(fill="both", expand=True)
@@ -109,6 +113,7 @@ class App(ctk.CTk):
         self._panel_comp.carregar_caso(caso)
         self._panel_conf.carregar_caso(caso)
         self._panel_calc.carregar_caso(caso)
+        self._panel_resumo.carregar_caso(caso)
         self._panel_rel.carregar_caso(caso)
 
     def _on_caso_deletado(self, caso_id: int) -> None:
@@ -120,6 +125,7 @@ class App(ctk.CTk):
             self._panel_comp.carregar_caso(None)
             self._panel_conf.carregar_caso(None)
             self._panel_calc.carregar_caso(None)
+            self._panel_resumo.carregar_caso(None)
             self._panel_rel.carregar_caso(None)
 
     # ── Status e custos AI ───────────────────────────────────────────────────
