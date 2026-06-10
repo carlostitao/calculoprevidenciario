@@ -168,7 +168,7 @@ class CalculoPanel(ctk.CTkFrame):
         stats.pack(fill="x", padx=16, pady=(4, 12))
 
         def _stat(texto: str, valor: str, cor: str = AZUL_CLARO) -> None:
-            box = ctk.CTkFrame(stats, corner_radius=8, fg_color="#ffffff15")
+            box = ctk.CTkFrame(stats, corner_radius=8, fg_color="#1e2d45")
             box.pack(side="left", padx=6, pady=4, ipadx=10, ipady=6)
             ctk.CTkLabel(box, text=texto, font=font_pequeno(), text_color="#aaccee").pack()
             ctk.CTkLabel(box, text=valor, font=font_destaque(), text_color=cor).pack()
@@ -202,7 +202,7 @@ class CalculoPanel(ctk.CTkFrame):
             ("Com pendência", str(pendentes), AMARELO),
             ("Sem pendência", str(n_valid), VERDE_OK),
         ]:
-            b = ctk.CTkFrame(info, corner_radius=6, fg_color="#ffffff18")
+            b = ctk.CTkFrame(info, corner_radius=6, fg_color="#1e2d45")
             b.pack(side="left", padx=6, ipadx=8, ipady=4)
             ctk.CTkLabel(b, text=txt, font=font_pequeno(), text_color="#aaccee").pack()
             ctk.CTkLabel(b, text=val, font=font_valor(), text_color=cor).pack()

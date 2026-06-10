@@ -63,7 +63,7 @@ class CasosSidebar(ctk.CTkFrame):
         ctk.CTkButton(
             hdr, text="＋", width=32, height=28,
             corner_radius=6,
-            fg_color="#ffffff22", hover_color="#ffffff44",
+            fg_color="#2a4a7a", hover_color="#3a5a8a",
             text_color="#ffffff",
             font=ctk.CTkFont(size=14, weight="bold"),
             command=self._novo_caso_sidebar,
