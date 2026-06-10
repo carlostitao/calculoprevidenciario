@@ -119,7 +119,7 @@ class CasosSidebar(ctk.CTkFrame):
 
     def _criar_item(self, caso: Caso) -> None:
         selecionado = caso.id == self._selecionado
-        cor_fundo = (("#e8f4fd", "#1a2a3e") if selecionado else ("transparent", "transparent"))
+        cor_fundo = (("#e8f4fd", "#1a2a3e") if selecionado else "transparent")
 
         frame = ctk.CTkFrame(
             self._scroll, corner_radius=8,
