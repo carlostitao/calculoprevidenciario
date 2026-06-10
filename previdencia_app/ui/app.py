@@ -17,11 +17,21 @@ from .confronto_panel import ConfrontoPanel
 from .calculo_panel import CalculoPanel
 from .relatorio_panel import RelatorioPanel
 from .resumo_mensal_panel import ResumoMensalPanel
+from .theme import AZUL_PRIMARIO, AZUL_CLARO, CINZA_TEXTO, BG_CARD, font_secao, font_pequeno
 
 logger = logging.getLogger(__name__)
 
 ctk.set_appearance_mode(UI_APARENCIA_PADRAO)
 ctk.set_default_color_theme(UI_TEMA_COR)
+
+_TABS = [
+    ("📄  Documentos",     "Documentos"),
+    ("📊  Competências",   "Competências"),
+    ("🔍  Confronto",      "Confronto"),
+    ("🧮  Cálculo",        "Cálculo"),
+    ("📅  Resumo Mensal",  "Resumo Mensal"),
+    ("📑  Relatório",      "Relatório"),
+]
 
 
 class App(ctk.CTk):
@@ -46,48 +56,104 @@ class App(ctk.CTk):
         self.grid_rowconfigure(1, weight=1)
 
         # Barra superior
-        self._topbar = ctk.CTkFrame(self, height=44, corner_radius=0)
+        self._topbar = ctk.CTkFrame(self, height=52, corner_radius=0,
+                                    fg_color=(AZUL_PRIMARIO, "#0d1b35"))
         self._topbar.grid(row=0, column=0, columnspan=2, sticky="ew")
+        self._topbar.grid_propagate(False)
         self._build_topbar()
 
         # Sidebar de casos
-        self._sidebar = CasosSidebar(self, width=220, on_select=self._on_caso_selecionado)
+        self._sidebar = CasosSidebar(self, width=240, on_select=self._on_caso_selecionado)
         self._sidebar.set_on_deletar(self._on_caso_deletado)
         self._sidebar.grid(row=1, column=0, sticky="nsew", padx=(8, 0), pady=8)
 
-        # Área de abas (área principal)
+        # Área de abas
         self._tabs = ctk.CTkTabview(self)
         self._tabs.grid(row=1, column=1, sticky="nsew", padx=8, pady=8)
 
-        for nome in ["Documentos", "Competências", "Confronto", "Cálculo", "Resumo Mensal", "Relatório"]:
-            self._tabs.add(nome)
+        for label, key in _TABS:
+            self._tabs.add(label)
 
-        self._panel_docs = DocumentsPanel(self._tabs.tab("Documentos"), app=self)
+        def tab(key: str) -> ctk.CTkFrame:
+            for label, k in _TABS:
+                if k == key:
+                    return self._tabs.tab(label)
+            raise KeyError(key)
+
+        self._tab = tab
+
+        self._panel_docs  = DocumentsPanel(tab("Documentos"), app=self)
         self._panel_docs.pack(fill="both", expand=True)
 
-        self._panel_comp = CompetenciasTable(self._tabs.tab("Competências"), app=self)
+        self._panel_comp  = CompetenciasTable(tab("Competências"), app=self)
         self._panel_comp.pack(fill="both", expand=True)
 
-        self._panel_conf = ConfrontoPanel(self._tabs.tab("Confronto"), app=self)
+        self._panel_conf  = ConfrontoPanel(tab("Confronto"), app=self)
         self._panel_conf.pack(fill="both", expand=True)
 
-        self._panel_calc = CalculoPanel(self._tabs.tab("Cálculo"), app=self)
+        self._panel_calc  = CalculoPanel(tab("Cálculo"), app=self)
         self._panel_calc.pack(fill="both", expand=True)
 
-        self._panel_resumo = ResumoMensalPanel(self._tabs.tab("Resumo Mensal"), app=self)
+        self._panel_resumo = ResumoMensalPanel(tab("Resumo Mensal"), app=self)
         self._panel_resumo.pack(fill="both", expand=True)
 
-        self._panel_rel = RelatorioPanel(self._tabs.tab("Relatório"), app=self)
+        self._panel_rel   = RelatorioPanel(tab("Relatório"), app=self)
         self._panel_rel.pack(fill="both", expand=True)
 
     def _build_topbar(self) -> None:
-        self._topbar.grid_columnconfigure(5, weight=1)
+        self._topbar.grid_columnconfigure(3, weight=1)
 
-        ctk.CTkButton(self._topbar, text="Novo Caso", width=110, command=self._novo_caso).grid(row=0, column=0, padx=8, pady=8)
-        ctk.CTkButton(self._topbar, text="Aparência", width=100, command=self._toggle_aparencia).grid(row=0, column=1, padx=4, pady=8)
+        # Ícone + título
+        ctk.CTkLabel(
+            self._topbar,
+            text="⚖",
+            font=ctk.CTkFont(size=22),
+            text_color="#ffffff",
+        ).grid(row=0, column=0, padx=(16, 4), pady=10)
 
-        self._lbl_status = ctk.CTkLabel(self._topbar, text="Nenhum caso aberto", anchor="e")
-        self._lbl_status.grid(row=0, column=6, padx=12, pady=8, sticky="e")
+        ctk.CTkLabel(
+            self._topbar,
+            text="Análise Previdenciária",
+            font=ctk.CTkFont(family="Segoe UI", size=15, weight="bold"),
+            text_color="#ffffff",
+        ).grid(row=0, column=1, padx=(0, 24), pady=10)
+
+        # Badge do caso ativo
+        self._badge_caso = ctk.CTkLabel(
+            self._topbar,
+            text="Nenhum caso aberto",
+            font=ctk.CTkFont(size=11),
+            text_color="#aaccee",
+            anchor="w",
+        )
+        self._badge_caso.grid(row=0, column=3, padx=8, sticky="ew")
+
+        # Botão novo caso
+        ctk.CTkButton(
+            self._topbar,
+            text="＋  Novo Caso",
+            width=120,
+            height=32,
+            corner_radius=6,
+            fg_color="#ffffff22",
+            hover_color="#ffffff33",
+            text_color="#ffffff",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            command=self._novo_caso,
+        ).grid(row=0, column=4, padx=6, pady=10)
+
+        # Toggle de aparência
+        ctk.CTkButton(
+            self._topbar,
+            text="☀ / ☾",
+            width=70,
+            height=32,
+            corner_radius=6,
+            fg_color="#ffffff22",
+            hover_color="#ffffff33",
+            text_color="#ffffff",
+            command=self._toggle_aparencia,
+        ).grid(row=0, column=5, padx=(0, 16), pady=10)
 
     # ── Ações da topbar ──────────────────────────────────────────────────────
 
@@ -117,31 +183,31 @@ class App(ctk.CTk):
         self._panel_rel.carregar_caso(caso)
 
     def _on_caso_deletado(self, caso_id: int) -> None:
-        """Limpa todos os painéis quando o caso ativo é deletado."""
         if self._caso_ativo and self._caso_ativo.id == caso_id:
             self._caso_ativo = None
-            self._lbl_status.configure(text="Nenhum caso aberto")
-            self._panel_docs.carregar_caso(None)
-            self._panel_comp.carregar_caso(None)
-            self._panel_conf.carregar_caso(None)
-            self._panel_calc.carregar_caso(None)
-            self._panel_resumo.carregar_caso(None)
-            self._panel_rel.carregar_caso(None)
+            self._badge_caso.configure(text="Nenhum caso aberto")
+            for panel in (self._panel_docs, self._panel_comp, self._panel_conf,
+                          self._panel_calc, self._panel_resumo, self._panel_rel):
+                panel.carregar_caso(None)
 
-    # ── Status e custos AI ───────────────────────────────────────────────────
+    # ── Status ───────────────────────────────────────────────────────────────
 
     def _atualizar_status(self) -> None:
         if self._caso_ativo:
-            casos = CasoRepository.listar_todos()
-            self._lbl_status.configure(
-                text=f"Caso: {self._caso_ativo.nome}  |  Total: {len(casos)}  |  Custo AI: ${self._custo_ai:.4f}"
+            c = self._caso_ativo
+            self._badge_caso.configure(
+                text=f"📂  {c.nome}  ·  CPF {_fmt_cpf(c.cpf)}  ·  Custo AI: ${self._custo_ai:.4f}"
             )
 
     def atualizar_custo_ai(self, custo: float) -> None:
-        """Chamado de qualquer thread para atualizar o custo exibido."""
         self._custo_ai += custo
         self.after(0, self._atualizar_status)
 
     @property
     def caso_ativo(self) -> Optional[Caso]:
         return self._caso_ativo
+
+
+def _fmt_cpf(cpf: str) -> str:
+    d = "".join(c for c in cpf if c.isdigit())
+    return f"{d[:3]}.{d[3:6]}.{d[6:9]}-{d[9:]}" if len(d) == 11 else cpf
