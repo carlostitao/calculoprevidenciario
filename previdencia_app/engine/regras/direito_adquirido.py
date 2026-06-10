@@ -40,23 +40,25 @@ def calcular(caso: Caso, competencias: List[Competencia], data_req: date) -> dic
     comp_ate_reforma = _competencias_ate_reforma(competencias)
     tempo = calcular_tempo_contributivo(comp_ate_reforma)
 
-    data_ref = _REFORMA.strftime("%m/%Y")  # média calculada até a data da reforma
+    # Bug fix: INPC corrige até data_req (não congela em 11/2019 — Art. 29-B Lei 8.213)
+    data_ref = data_req.strftime("%m/%Y")
     media_result = calcular_media_80_maiores(comp_ate_reforma, data_ref)
 
     anos_tc = Decimal(str(tempo.total_meses)) / 12
-    idade_na_reforma = Decimal(str(
-        (_REFORMA - caso.data_nascimento).days / 365.25
-    ))
-    fator_result = calcular_fator_previdenciario(anos_tc, idade_na_reforma)
+    # Idade e FP calculados na data do requerimento (interpretação mais favorável)
+    idade_no_req = Decimal(str((data_req - caso.data_nascimento).days / 365.25))
+    fator_result = calcular_fator_previdenciario(
+        anos_tc, idade_no_req, sexo=caso.sexo.value
+    )
 
-    # Aplica fator somente se diminui o benefício (favorável ao segurado: ignorar fator < 1)
+    # Aplica fator somente se aumenta o benefício (interpretação mais favorável ao segurado)
     fator_aplicavel = fator_result.fator if fator_result.fator >= Decimal("1") else Decimal("1")
     salario_beneficio = (media_result.media * fator_aplicavel).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
-    anos_min = 35 if caso.sexo == Sexo.MASCULINO else 30
-    excedente = max(Decimal("0"), anos_tc - Decimal(str(anos_min)))
-    coeficiente = min(Decimal("1.0"), Decimal("0.60") + excedente * Decimal("0.02"))
-    rmi = (salario_beneficio * coeficiente).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    # Pré-EC 103: aposentadoria TC = 100% do SB (Art. 50, Lei 8.213/91)
+    # O coeficiente 60%+2% é exclusivo da EC 103 e NÃO se aplica ao direito adquirido
+    coeficiente = Decimal("1.0")
+    rmi = salario_beneficio
 
     return {
         "regra": "Direito Adquirido (implementado até 13/11/2019)",
@@ -71,7 +73,11 @@ def calcular(caso: Caso, competencias: List[Competencia], data_req: date) -> dic
         "detalhamento": {
             "fator_formula": fator_result.formula_detalhada,
             "fator_aplicado": str(fator_aplicavel),
-            "nota": "Fator previdenciário ignorado se < 1 (interpretação mais favorável ao segurado)",
+            "nota": (
+                "Regra pré-reforma: RMI = 100% do SB (Art. 50 Lei 8.213). "
+                "FP ignorado se < 1 (interpretação favorável ao segurado). "
+                "INPC corrigido até data do requerimento."
+            ),
             "media_regra": media_result.regra_aplicada,
             "tempo_contributivo": detalhe_tempo(tempo),
         },

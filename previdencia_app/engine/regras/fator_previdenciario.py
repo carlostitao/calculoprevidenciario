@@ -54,11 +54,15 @@ def calcular_fator_previdenciario(
     tempo_contribuicao_anos: Decimal,
     idade_anos: Decimal,
     tabela_sobrevida: Optional[dict] = None,
+    sexo: str = "M",
 ) -> ResultadoFator:
     """
     f = (Tc × a / Es) × (1 + (Id + Tc × a) / 100)
+    Para mulheres: Tc += 5 (Art. 29, §9, Lei 8.213/91).
     """
-    tc = float(tempo_contribuicao_anos)
+    tc_real = float(tempo_contribuicao_anos)
+    # Art. 29, §9, Lei 8.213/91: acréscimo de 5 anos ao Tc para mulheres
+    tc = tc_real + 5 if sexo == "F" else tc_real
     id_ = float(idade_anos)
     aliq = float(_ALIQUOTA)
     es = obter_expectativa_sobrevida(int(id_), tabela_sobrevida)
@@ -69,13 +73,14 @@ def calcular_fator_previdenciario(
     fator = (tc * aliq / es) * (1 + (id_ + tc * aliq) / 100)
     fator_dec = Decimal(str(round(fator, 4)))
 
+    bonus_nota = " (+5 anos mulher)" if sexo == "F" else ""
     return ResultadoFator(
         fator=fator_dec,
         tempo_contribuicao_anos=tempo_contribuicao_anos,
         idade_anos=idade_anos,
         expectativa_sobrevida=Decimal(str(round(es, 1))),
         formula_detalhada=(
-            f"f = ({tc:.2f} × {aliq} / {es:.1f}) × "
+            f"f = ({tc:.2f}{bonus_nota} × {aliq} / {es:.1f}) × "
             f"(1 + ({id_:.2f} + {tc:.2f} × {aliq}) / 100) = {fator_dec}"
         ),
     )

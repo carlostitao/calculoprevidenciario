@@ -64,7 +64,7 @@ def calcular(caso: Caso, competencias: List[Competencia], data_req: date) -> dic
     anos_tc = Decimal(str(tempo_atual.total_meses)) / 12
     idade = Decimal(str((data_req - caso.data_nascimento).days / 365.25))
 
-    fator_result = calcular_fator_previdenciario(anos_tc, idade)
+    fator_result = calcular_fator_previdenciario(anos_tc, idade, sexo=caso.sexo.value)
 
     # Fator previdenciário obrigatório no pedágio 50%
     salario_beneficio = (media_result.media * fator_result.fator).quantize(
