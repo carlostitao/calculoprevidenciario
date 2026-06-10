@@ -294,7 +294,7 @@ def _ocr_via_claude(caminho: str, sufixo: str) -> str:
                         except Exception as exc:
                             logger.warning("Erro ao renderizar pág %d: %s", i + 1, exc)
 
-                logger.info("[OCR] %d páginas renderizadas — enviando em paralelo (workers=4)", len(paginas_bytes))
+                logger.info("[OCR] %d páginas renderizadas — enviando em paralelo (workers=2)", len(paginas_bytes))
 
                 resultados_ocr: dict[int, str] = {}
 
@@ -313,8 +313,16 @@ def _ocr_via_claude(caminho: str, sufixo: str) -> str:
                     logger.warning("[OCR] Falha na pág %d: %s", idx + 1, r.error)
                     return (idx, "")
 
-                with ThreadPoolExecutor(max_workers=4) as pool:
-                    futuros = {pool.submit(_ocr_pagina, item): item[0] for item in paginas_bytes}
+                # 2 workers + submissão escalonada (0.3s entre jobs) para evitar
+                # burst de 429 no rate limit da API
+                with ThreadPoolExecutor(max_workers=2) as pool:
+                    futuros = {}
+                    for i, item in enumerate(paginas_bytes):
+                        if i > 0:
+                            import time as _time
+                            _time.sleep(0.3)
+                        fut = pool.submit(_ocr_pagina, item)
+                        futuros[fut] = item[0]
                     for futuro in as_completed(futuros):
                         try:
                             idx, texto_pag = futuro.result()
