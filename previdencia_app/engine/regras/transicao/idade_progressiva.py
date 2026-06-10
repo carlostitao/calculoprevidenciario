@@ -12,16 +12,18 @@ from ..media_contribuicoes import calcular_media_100
 from .._helpers import detalhe_tempo
 
 
-def _idade_minima(sexo: Sexo, ano_req: int) -> int:
+def _idade_minima(sexo: Sexo, ano_req: int) -> Decimal:
     """
     Homens: 65 anos (estável).
-    Mulheres: 56 (2019) → 62 (2031+), +0.5 ano/ano.
+    Mulheres: EC 103 Art. 16 §1º — 56 em 2020, +6 meses a cada ano até 62 em 2032.
+      2020=56, 2021=56.5, 2022=57, 2023=57.5 ... 2032+=62.
+    Retorna Decimal para preservar os meios anos (ex: 57.5).
     """
     if sexo == Sexo.MASCULINO:
-        return 65
-    acrescimo_semestres = max(0, ano_req - 2019)
-    anos_acrescidos = acrescimo_semestres * 0.5
-    return min(62, int(56 + anos_acrescidos))
+        return Decimal("65")
+    # Base 2020 = 56 anos; +0.5 por ano a partir de 2021
+    acrescimo = Decimal(str(max(0, ano_req - 2020))) * Decimal("0.5")
+    return min(Decimal("62"), Decimal("56") + acrescimo)
 
 
 def _tempo_minimo_meses(sexo: Sexo) -> int:
@@ -35,11 +37,12 @@ def verificar_elegibilidade(caso: Caso, competencias: List[Competencia], data_re
     if tempo.total_meses < min_meses:
         return False, f"Tempo insuficiente: faltam {min_meses - tempo.total_meses} meses"
 
-    idade_anos = (data_req - caso.data_nascimento).days / 365.25
+    idade_anos = Decimal(str(round((data_req - caso.data_nascimento).days / 365.25, 4)))
     minima = _idade_minima(caso.sexo, data_req.year)
 
     if idade_anos < minima:
-        return False, f"Idade insuficiente: {idade_anos:.1f} anos (mínimo {minima})"
+        minima_fmt = f"{int(minima)} anos" if minima == int(minima) else f"{int(minima)} anos e 6 meses"
+        return False, f"Idade insuficiente: {float(idade_anos):.1f} anos (mínimo {minima_fmt})"
 
     return True, ""
 
@@ -56,6 +59,10 @@ def calcular(caso: Caso, competencias: List[Competencia], data_req: date) -> dic
     coeficiente = min(Decimal("1.0"), Decimal("0.60") + excedente * Decimal("0.02"))
     rmi = (media_result.media * coeficiente).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
+    minima = _idade_minima(caso.sexo, data_req.year)
+    minima_fmt = f"{int(minima)} anos" if minima == int(minima) else f"{int(minima)} anos e 6 meses"
+    anos_para_100 = Decimal(str(anos_min)) + Decimal("20")  # 60%+2%×20 = 100%
+
     return {
         "regra": "Idade Mínima Progressiva (Art. 16 EC 103/2019)",
         "elegivel": elegivel,
@@ -67,8 +74,10 @@ def calcular(caso: Caso, competencias: List[Competencia], data_req: date) -> dic
         "coeficiente": coeficiente,
         "rmi": rmi,
         "detalhamento": {
-            "idade_minima_necessaria": _idade_minima(caso.sexo, data_req.year),
-            "anos_tc": float(anos_tc),
+            "idade_minima_necessaria": minima_fmt,
+            "tc_minimo_anos": anos_min,
+            "tc_apurado_anos": float(anos_tc),
+            "tc_para_100pct": float(anos_para_100),
             "coeficiente_pct": float(coeficiente * 100),
             "tempo_contributivo": detalhe_tempo(tempo),
         },

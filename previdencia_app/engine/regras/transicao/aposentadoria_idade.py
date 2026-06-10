@@ -13,11 +13,14 @@ from .._helpers import detalhe_tempo
 
 
 def _idade_minima_transicao(sexo: Sexo, ano_req: int) -> int:
-    """Mulheres: 60 (2020) → 62 (2023+), +1 a cada ano. Homens: 65 estável."""
+    """
+    Homens: 65 anos (estável).
+    Mulheres — EC 103/2019 Art. 18: 60 (2020), 61 (2021), 62 (2022 em diante).
+    """
     if sexo == Sexo.MASCULINO:
         return 65
-    tabela = {2020: 60, 2021: 61, 2022: 61, 2023: 62}
-    return tabela.get(ano_req, 62 if ano_req >= 2023 else 60)
+    tabela = {2020: 60, 2021: 61}
+    return tabela.get(ano_req, 62)
 
 
 _CARENCIA_MESES = 15 * 12  # 180 meses
@@ -60,8 +63,10 @@ def calcular(caso: Caso, competencias: List[Competencia], data_req: date) -> dic
         "coeficiente": coeficiente,
         "rmi": rmi,
         "detalhamento": {
-            "carencia_necessaria_meses": _CARENCIA_MESES,
-            "carencia_apurada_meses": tempo.total_meses,
+            "idade_minima_necessaria": f"{_idade_minima_transicao(caso.sexo, data_req.year)} anos",
+            "carencia_necessaria_anos": 15,
+            "carencia_apurada_anos": float(anos_contrib),
+            "tc_para_100pct": 35.0,  # 15 + 20 anos extras para atingir 100%
             "coeficiente_pct": float(coeficiente * 100),
             "tempo_contributivo": detalhe_tempo(tempo),
         },
