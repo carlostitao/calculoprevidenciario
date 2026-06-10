@@ -37,8 +37,8 @@ class CalculoPanel(ctk.CTkFrame):
         # Modo de cálculo: todas competências ou apenas validadas
         ctk.CTkLabel(barra, text="  Competências:").pack(side="left", padx=(12, 2))
         self._modo_var = ctk.StringVar(value="todas")
-        ctk.CTkRadioButton(barra, text="Todas (CNIS completo)", variable=self._modo_var, value="todas").pack(side="left", padx=4)
-        ctk.CTkRadioButton(barra, text="Somente validadas", variable=self._modo_var, value="validadas").pack(side="left", padx=4)
+        ctk.CTkRadioButton(barra, text="Todas as fontes", variable=self._modo_var, value="todas").pack(side="left", padx=4)
+        ctk.CTkRadioButton(barra, text="Sem pendências CNIS", variable=self._modo_var, value="validadas").pack(side="left", padx=4)
 
         ctk.CTkButton(barra, text="Calcular", command=self._calcular).pack(side="left", padx=8)
         ctk.CTkButton(barra, text="Comparar ambos", command=self._calcular_comparativo).pack(side="left", padx=4)
@@ -84,7 +84,7 @@ class CalculoPanel(ctk.CTkFrame):
             else:
                 competencias = todas
             resultados = calcular(self._caso, competencias, data_req)
-            label = "validadas" if modo == "validadas" else "todas"
+            label = "sem pendências CNIS" if modo == "validadas" else "todas as fontes"
             self._app.after(0, lambda: self._exibir(resultados, label=label))
 
         threading.Thread(target=_trabalho, daemon=True).start()
@@ -128,13 +128,13 @@ class CalculoPanel(ctk.CTkFrame):
         # Cabeçalho comparativo
         hdr = ctk.CTkFrame(self._scroll, fg_color="#1a1a2e", corner_radius=8)
         hdr.pack(fill="x", padx=4, pady=(4, 8))
-        ctk.CTkLabel(hdr, text="COMPARATIVO: CNIS completo vs Somente validadas",
+        ctk.CTkLabel(hdr, text="COMPARATIVO: Todas as fontes vs Sem pendências CNIS",
                      font=ctk.CTkFont(size=13, weight="bold"), text_color="#f0a500").pack(padx=12, pady=6)
 
         pendentes = n_todas - n_valid
         info = ctk.CTkFrame(self._scroll, fg_color="transparent")
         info.pack(fill="x", padx=4, pady=(0, 8))
-        ctk.CTkLabel(info, text=f"Total de competências: {n_todas}  |  Com pendência CNIS: {pendentes}  |  Validadas: {n_valid}",
+        ctk.CTkLabel(info, text=f"Total de competências (todas fontes): {n_todas}  |  Com pendência CNIS: {pendentes}  |  Sem pendência: {n_valid}",
                      text_color="#888888", font=ctk.CTkFont(size=11)).pack()
 
         # Lado a lado por regra
@@ -161,8 +161,8 @@ class CalculoPanel(ctk.CTkFrame):
                          text_color=cor).grid(row=0, column=col, sticky="w", padx=8, pady=(0, 4))
 
         ctk.CTkLabel(grid, text="").grid(row=0, column=0, sticky="w", padx=8)
-        _cabecalho(1, "CNIS completo", "#4a9eff")
-        _cabecalho(2, "Somente validadas", "#2ecc71")
+        _cabecalho(1, "Todas as fontes", "#4a9eff")
+        _cabecalho(2, "Sem pendências CNIS", "#2ecc71")
 
         def _linha_comp(row: int, label: str, v_todas, v_valid) -> None:
             ctk.CTkLabel(grid, text=label, anchor="w", width=220).grid(row=row, column=0, sticky="w", padx=8, pady=2)

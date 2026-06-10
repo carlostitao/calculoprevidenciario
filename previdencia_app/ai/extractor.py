@@ -241,15 +241,30 @@ def _parse_generico(dados: dict, caso_id: int, documento_id: Optional[int], font
         rem = _get_remuneracao(comp)
         base = _get(comp, "base_contribuicao", "base", default=rem)
         contrib = _get(comp, "valor_inss", "valor_contribuicao", "contribuicao", "inss")
+        competencia_str = _get_competencia_str(comp)
+
+        # MEI: base de contribuição é sempre o salário mínimo vigente na competência
+        if tipo_vinculo == TipoVinculo.MEI and competencia_str:
+            from ..engine.regras.media_contribuicoes import salario_minimo_para_competencia
+            base_mei = salario_minimo_para_competencia(competencia_str)
+            remuneracao_bruta = base_mei
+            base_contribuicao = base_mei
+            # valor_contribuicao = INSS efetivamente recolhido (5% do SM), conforme documento
+            valor_contribuicao = _decimal_safe(contrib) if contrib else None
+        else:
+            remuneracao_bruta = _decimal_safe(rem)
+            base_contribuicao = _decimal_safe(base)
+            valor_contribuicao = _decimal_safe(contrib) if contrib else None
+
         c = Competencia(
             caso_id=caso_id,
-            competencia=_get_competencia_str(comp),
+            competencia=competencia_str,
             tipo_vinculo=tipo_vinculo,
             empregador_nome=empregador,
             empregador_cnpj_cpf=cnpj,
-            remuneracao_bruta=_decimal_safe(rem),
-            base_contribuicao=_decimal_safe(base),
-            valor_contribuicao=_decimal_safe(contrib) if contrib else None,
+            remuneracao_bruta=remuneracao_bruta,
+            base_contribuicao=base_contribuicao,
+            valor_contribuicao=valor_contribuicao,
             fonte=fonte,
             documento_id=documento_id,
             confianca_extracao=_calcular_confianca(comp),
@@ -336,6 +351,9 @@ def extrair(texto: str, tipo: TipoDocumento, caso_id: int, documento_id: Optiona
     from ..config import MODEL_ANALISE
     _SONNET_TIPOS = {TipoDocumento.CNIS, TipoDocumento.CTPS, TipoDocumento.CTC, TipoDocumento.FGTS}
 
+    # PGDAS_MEI: documentos extensos (multi-ano), texto nativo, Haiku com limite ampliado
+    _LARGE_DOC_TIPOS = {TipoDocumento.PGDAS_MEI}
+
     # C) Usa Haiku quando o texto veio de pdfplumber (estruturado, sem ruído de OCR).
     # Documentos de imagem (CTPS manuscrita, FGTS escaneado) ficam com Sonnet pela
     # variabilidade do OCR. Heurística: texto pdfplumber tem densidade alta e sem
@@ -346,8 +364,12 @@ def extrair(texto: str, tipo: TipoDocumento, caso_id: int, documento_id: Optiona
     else:
         modelo = MODEL_EXTRACAO  # Haiku para texto nativo (rápido)
 
-    limite_texto = 30000 if tipo in _SONNET_TIPOS else 8000
-    max_tokens = 16000 if tipo in _SONNET_TIPOS else 4096
+    if tipo in _SONNET_TIPOS:
+        limite_texto, max_tokens = 30000, 16000
+    elif tipo in _LARGE_DOC_TIPOS:
+        limite_texto, max_tokens = 60000, 8192
+    else:
+        limite_texto, max_tokens = 8000, 4096
 
     logger.info("[EXTRATOR] Modelo selecionado: %s (texto_nativo=%s)", modelo, _e_texto_nativo)
 

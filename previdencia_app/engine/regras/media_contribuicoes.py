@@ -59,6 +59,44 @@ _TETO_HISTORICO: List[tuple] = [
     ("01/2026", Decimal("8475.55")),
 ]
 
+# Tabela histórica do salário mínimo (MM/YYYY → valor em R$).
+# MEI: base_contribuicao = salário mínimo vigente na competência.
+_SALARIO_MINIMO_HISTORICO: List[tuple] = [
+    ("01/2009", Decimal("465.00")),
+    ("01/2010", Decimal("510.00")),
+    ("03/2011", Decimal("545.00")),
+    ("01/2012", Decimal("622.00")),
+    ("01/2013", Decimal("678.00")),
+    ("01/2014", Decimal("724.00")),
+    ("01/2015", Decimal("788.00")),
+    ("01/2016", Decimal("880.00")),
+    ("01/2017", Decimal("937.00")),
+    ("01/2018", Decimal("954.00")),
+    ("01/2019", Decimal("998.00")),
+    ("01/2020", Decimal("1039.00")),
+    ("02/2020", Decimal("1045.00")),
+    ("01/2021", Decimal("1100.00")),
+    ("01/2022", Decimal("1212.00")),
+    ("01/2023", Decimal("1302.00")),
+    ("05/2023", Decimal("1320.00")),
+    ("01/2024", Decimal("1412.00")),
+    ("01/2025", Decimal("1518.00")),
+    ("01/2026", Decimal("1622.00")),
+]
+
+
+def salario_minimo_para_competencia(competencia: str) -> Decimal:
+    """Retorna o salário mínimo vigente para a competência informada (MM/YYYY)."""
+    chave = _comp_key(competencia)
+    sm_vigente = Decimal("465.00")  # valor base MEI (jan/2009)
+    for comp_inicio, valor in sorted(_SALARIO_MINIMO_HISTORICO, key=lambda t: _comp_key(t[0])):
+        if _comp_key(comp_inicio) <= chave:
+            sm_vigente = valor
+        else:
+            break
+    return sm_vigente
+
+
 # Cache: MM/YYYY → teto como Decimal
 _teto_cache: Dict[str, Decimal] = {}
 
