@@ -11,36 +11,32 @@ from ..correcao_monetaria import atualizar_inpc
 
 logger = logging.getLogger(__name__)
 
-_INICIO_PERIODO = "07/1994"
+_INICIO_PERIODO = "03/1994"
 
 
 # Tabela histórica do teto do RGPS (MM/YYYY → valor em R$).
 # Vigente a partir do mês indicado até a próxima entrada.
 # Fontes: legislação previdenciária e portarias MPS/MF.
 _TETO_HISTORICO: List[tuple] = [
-    ("07/1994", Decimal("636.36")),
-    ("03/1995", Decimal("672.29")),
-    ("05/1995", Decimal("713.28")),
+    ("03/1994", Decimal("582.86")),
+    ("05/1995", Decimal("832.66")),
     ("05/1996", Decimal("957.56")),
-    ("05/1997", Decimal("1031.87")),
+    ("06/1997", Decimal("1031.87")),
     ("06/1998", Decimal("1081.50")),
-    ("05/1999", Decimal("1255.32")),
-    ("06/1999", Decimal("1328.25")),
-    ("04/2000", Decimal("1328.25")),
-    ("06/2000", Decimal("1430.88")),
-    ("06/2001", Decimal("1430.88")),
-    ("01/2002", Decimal("1561.56")),
+    ("12/1998", Decimal("1200.00")),
+    ("06/1999", Decimal("1255.32")),
+    ("06/2000", Decimal("1328.25")),
+    ("06/2001", Decimal("1430.00")),
     ("06/2002", Decimal("1561.56")),
-    ("01/2003", Decimal("1869.34")),
-    ("04/2003", Decimal("1869.34")),
+    ("06/2003", Decimal("1869.34")),
     ("01/2004", Decimal("2400.00")),
-    ("05/2004", Decimal("2400.00")),
-    ("04/2005", Decimal("2508.72")),
-    ("04/2006", Decimal("2801.82")),
+    ("05/2004", Decimal("2508.72")),
+    ("05/2005", Decimal("2668.15")),
+    ("04/2006", Decimal("2801.56")),
     ("04/2007", Decimal("2894.28")),
     ("03/2008", Decimal("3038.99")),
     ("02/2009", Decimal("3218.90")),
-    ("01/2010", Decimal("3416.54")),
+    ("01/2010", Decimal("3467.40")),
     ("01/2011", Decimal("3691.74")),
     ("01/2012", Decimal("3916.20")),
     ("01/2013", Decimal("4159.00")),
@@ -124,7 +120,7 @@ def teto_para_competencia(competencia: str) -> Decimal:
     """Retorna o teto previdenciário vigente para a competência informada."""
     _construir_cache_teto()
     chave = _comp_key(competencia)
-    teto_vigente = Decimal("636.36")  # valor mínimo histórico (jul/1994)
+    teto_vigente = Decimal("582.86")  # valor mínimo histórico (mar/1994)
     for comp_inicio, valor in sorted(_TETO_HISTORICO, key=lambda t: _comp_key(t[0])):
         if _comp_key(comp_inicio) <= chave:
             teto_vigente = valor
